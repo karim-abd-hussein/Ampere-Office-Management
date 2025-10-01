@@ -6,6 +6,7 @@ use App\Filament\Resources\CycleResource\Pages;
 use App\Models\Cycle;
 use App\Models\Generator;
 use Filament\Forms;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -13,6 +14,7 @@ use Filament\Tables\Table;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Actions\DeleteAction;
+use Filament\Tables\Columns\TextColumn;
 
 class CycleResource extends Resource
 {
@@ -73,6 +75,11 @@ class CycleResource extends Resource
             Forms\Components\DatePicker::make('end_date')
                 ->label('تاريخ النهاية')
                 ->required(),
+            Select::make('generator_id')
+            ->label('المولدة')
+            ->relationship('generator', 'name')
+            ->searchable()
+            ->required(),
 
             Forms\Components\Toggle::make('is_archived')
                 ->label('مؤرشفة؟')
@@ -94,6 +101,8 @@ class CycleResource extends Resource
                     ->label('الدورة')
                     ->sortable(false)
                     ->searchable(), // 🔎 لتفعيل البحث
+
+                 TextColumn::make('generator.name')->label('المولدة')->sortable()->searchable(),
 
                 Tables\Columns\TextColumn::make('start_date')
                     ->label('من')
