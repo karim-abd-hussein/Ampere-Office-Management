@@ -1,0 +1,86 @@
+<?php
+
+namespace App\Exports;
+
+use App\Models\Invoice;
+use Maatwebsite\Excel\Concerns\Exportable;
+use Maatwebsite\Excel\Concerns\FromQuery;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMapping;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+
+class InvoicesExport implements FromQuery, WithMapping, WithHeadings, ShouldAutoSize, WithStyles, WithEvents
+{
+    use Exportable;
+
+    public function __construct(
+        protected ?int $collectorId = null,
+        protected ?int $cycleId = null,
+    ) {}
+
+    public function query()
+    {
+        $q = Invoice::query()
+            ->with(['subscriber:id,name,phone,status','cycle:id'])
+            ->select(['id','subscriber_id','cycle_id','old_reading','new_reading','consumption','unit_price_used','final_amount']);
+
+        if ($this->collectorId !== null) $q->where('collector_id', $this->collectorId);
+        if ($this->cycleId !== null)     $q->where('cycle_id', $this->cycleId);
+
+        return $q;
+    }
+
+    public function headings(): array
+    {
+        return ['المشترك','رقم الهاتف','الدورة','القراءة القديمة','القراءة الجديدة','الاستهلاك','سعر الكيلو','المبلغ النهائي','الحالة'];
+    }
+
+    public function map($invoice): array
+    {
+        $statusAr = match ($invoice->subscriber->status ?? null) {
+            'active'       => 'فعال',
+            'disconnected' => 'مفصول',
+            'cancelled'    => 'ملغى',
+            default        => '—',
+        };
+
+        return [
+            $invoice->subscriber->name ?? '',
+            $invoice->subscriber->phone ?? '',
+            $invoice->cycle_id,
+            (float) $invoice->old_reading,
+            (float) $invoice->new_reading,
+            (float) $invoice->consumption,
+            (float) $invoice->unit_price_used,
+            (float) $invoice->final_amount,
+            $statusAr,
+        ];
+    }
+
+    public function styles(Worksheet $sheet) { return [1 => ['font' => ['bold' => true]]]; }
+
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $ws = $event->sheet->getDelegate();
+                $ws->setRightToLeft(true);
+
+                $last = $ws->getHighestRow();
+                for ($r = 2; $r <= $last; $r++) {
+                    $status = (string) $ws->getCell("I{$r}")->getValue();
+                    if (in_array($status, ['مفصول','ملغى'], true)) {
+                        $ws->getStyle("A{$r}:I{$r}")
+                           ->getFill()->setFillType(Fill::FILL_SOLID)
+                           ->getStartColor()->setARGB('FFF2CC'); // أصفر فاتح
+                    }
+                }
+            },
+        ];
+    }
+}
