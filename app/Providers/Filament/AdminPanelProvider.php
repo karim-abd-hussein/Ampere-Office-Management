@@ -24,7 +24,7 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->default()
             ->id('admin')
-            ->path('admin')
+            ->path('')
             ->brandName('مكتب الأمبير')
             ->login()
             ->colors([
@@ -68,7 +68,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Http\Middleware\EnsureCanViewDashboard::class,
 
                 // ✅ تشغيل النسخ اليومي تلقائيًا على أول زيارة كل يوم
-                \App\Http\Middleware\AutoDailyBackup::class,
+                // \App\Http\Middleware\AutoDailyBackup::class,
             ])
             ->authMiddleware([
                 Authenticate::class,

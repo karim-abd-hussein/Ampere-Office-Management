@@ -53,7 +53,7 @@ return [
                 // مسار المجلد الذي يحتوي mysqldump.exe (استعمل سلاشات أمامية على ويندوز)
                 // مثال XAMPP: D:/xampp/mysql/bin
                 // مثال MySQL الرسمي: C:/Program Files/MySQL/MySQL Server 8.0/bin
-                'dump_binary_path' => env('DB_DUMP_BINARY_PATH', null),
+                'dump_binary_path' => 'C:/xampp_new/mysql/bin/',//env('DB_DUMP_BINARY_PATH', null),
 
                 // لتجنّب القفل على InnoDB
                 'useSingleTransaction' => true,
@@ -62,7 +62,7 @@ return [
                 'timeout' => env('DB_DUMP_TIMEOUT', 300),
 
                 // خيارات إضافية مفيدة مع MySQL 8
-                'addExtraOption' => '--no-tablespaces --column-statistics=0',
+                // 'add_extra_option' => '--skip-column-statistics',
             ],
         ],
 

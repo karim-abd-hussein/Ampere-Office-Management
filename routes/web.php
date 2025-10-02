@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Models\CompanyInvoice;
-
+use App\Http\Controllers\BackupController;
 /*
 |--------------------------------------------------------------------------
 | طباعة الوصولات (قائمة)
@@ -69,3 +69,12 @@ Route::middleware(['web', 'auth'])->group(function () {
         return response()->download($full, $fileName)->deleteFileAfterSend(true);
     })->name('admin.sync.export');
 });
+
+
+
+Route::middleware(['auth'])->group(function () {
+    Route::post('/backup/create', [BackupController::class, 'createBackup'])->name('backup.create');
+    Route::get('/backup/status', [BackupController::class, 'backupStatus'])->name('backup.status');
+    Route::get('/backup', [BackupController::class, 'showBackupPage'])->name('backup.management');
+});
+
