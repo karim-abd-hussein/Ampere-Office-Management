@@ -184,6 +184,7 @@ class GeneratorResource extends Resource
                         return $query;
                     }),
             ])
+            ->paginated([5, 10, 25])
             ->actions([
                 EditAction::make()->visible(fn () => static::allowManage()),
                 DeleteAction::make()->visible(fn () => static::allowManage()),

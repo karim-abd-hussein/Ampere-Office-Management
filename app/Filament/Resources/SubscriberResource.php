@@ -289,7 +289,7 @@ class SubscriberResource extends Resource
             ])
             ->defaultSort('id', 'asc')
             ->modifyQueryUsing(fn ($query) => $query->with('generator'))
-
+            ->paginated([5, 10, 25])
             ->actions([
                 EditAction::make()
                     ->tooltip('تعديل')

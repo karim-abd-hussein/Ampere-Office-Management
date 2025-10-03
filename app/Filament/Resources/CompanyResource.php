@@ -199,6 +199,7 @@ class CompanyResource extends Resource
                         'cancelled'    => 'ملغى',
                     ]),
             ])
+            ->paginated([5, 10, 25])
             ->actions([
                 EditAction::make()->label('تعديل')->visible(fn () => static::allowManage()),
                 DeleteAction::make()->label('حذف')->visible(fn () => static::allowManage()),

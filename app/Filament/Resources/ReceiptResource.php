@@ -167,6 +167,7 @@ class ReceiptResource extends Resource
                         return $query->whereHas('invoice.subscriber', fn (Builder $q) => $q->where('generator_id', (int) $val));
                     }),
             ])
+            ->paginated([5, 10, 25])
             ->actions([
                 Action::make('print')
                     ->label('عرض / طباعة')

@@ -80,6 +80,7 @@ class AreaResource extends Resource
                 EditAction::make()->label('تعديل')->visible(fn () => static::allowManage()),
                 DeleteAction::make()->label('حذف')->visible(fn () => static::allowManage()),
             ])
+            ->paginated([5, 10, 25])
             ->bulkActions([
                 DeleteBulkAction::make()->label('حذف متعدد')->visible(fn () => static::allowManage()),
             ]);

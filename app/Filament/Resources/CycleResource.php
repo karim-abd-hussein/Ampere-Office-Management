@@ -118,6 +118,7 @@ class CycleResource extends Resource
                     ->label('مؤرشفة؟')
                     ->boolean(),
             ])
+            ->paginated([5, 10, 25])
             ->filters([
                 // إذا حابب تبقي فلتر المولّدة (للدورات القديمة التي لها مولدة)
                 SelectFilter::make('generator_id')

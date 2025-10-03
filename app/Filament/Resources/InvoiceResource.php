@@ -489,6 +489,7 @@ class InvoiceResource extends Resource
                         ");
                     }),
             ])
+            ->paginated([5, 10, 25])
             ->actions([
                 Action::make('addNote')
                     ->label('ملاحظة')

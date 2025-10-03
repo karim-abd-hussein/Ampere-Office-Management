@@ -103,6 +103,7 @@ class CollectorResource extends Resource
                     ->label('حذف')
                     ->visible(fn () => static::allowManage()),
             ])
+            ->paginated([5, 10, 25])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make()
                     ->label('حذف متعدد')

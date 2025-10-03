@@ -156,6 +156,7 @@ class RoleResource extends Resource
                     }),
             ])
             ->modifyQueryUsing(fn (Builder $query) => $query->with('permissions'))
+            ->paginated([5, 10, 25])
             ->filters([
                 SelectFilter::make('permissions')
                     ->label('حسب الصلاحية')

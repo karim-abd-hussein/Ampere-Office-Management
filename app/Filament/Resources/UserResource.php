@@ -140,6 +140,7 @@ class UserResource extends Resource
                     }),
             ])
             ->modifyQueryUsing(fn ($query) => $query->with('roles')) // Eager load
+            ->paginated([5, 10, 25])
             ->filters([])
             ->actions([
                 EditAction::make()->label('تعديل')->visible(fn () => static::allowManage()),

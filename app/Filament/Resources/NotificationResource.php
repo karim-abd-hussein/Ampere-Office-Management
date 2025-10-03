@@ -98,6 +98,7 @@ class NotificationResource extends Resource
                     }),
             ])
 
+            ->paginated([5, 10, 25])
             ->filters([
                 SelectFilter::make('read_state')
                     ->label('الحالة')

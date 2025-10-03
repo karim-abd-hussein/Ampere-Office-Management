@@ -82,6 +82,7 @@ class PermissionResource extends Resource
                 EditAction::make()->label('تعديل')->visible(fn () => static::allowManage()),
                 DeleteAction::make()->label('حذف')->visible(fn () => static::allowManage())->requiresConfirmation(),
             ])
+            ->paginated([5, 10, 25])
             ->bulkActions([
                 DeleteBulkAction::make()->label('حذف جماعي')->visible(fn () => static::allowManage()),
             ]);

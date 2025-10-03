@@ -170,6 +170,7 @@ class CompanyInvoiceResource extends Resource
                     }),
             ])
             ->defaultSort('company_id')
+            ->paginated([5, 10, 25])
             ->filters([
                 SelectFilter::make('cycle_id')
                     ->label('حسب الدورة')
