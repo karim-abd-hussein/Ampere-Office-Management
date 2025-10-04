@@ -21,4 +21,3 @@ A comprehensive Laravel and Filament application designed for companies that man
 - **Admin Panel**: Filament PHP
 - **Database**: MySQL
 - **Frontend**: Tailwind CSS, Livewire
-- **Authentication**: Laravel Sanctum/Breeze
