@@ -63,6 +63,13 @@ class GeneratorResource extends Resource
     public static function canDelete($record): bool { return static::allowManage(); }
     public static function canDeleteAny(): bool     { return static::allowManage(); }
 
+    public static function getEloquentQuery(): Builder
+{
+    return parent::getEloquentQuery()->with(['area', 'tariffs']);
+}
+
+
+
     public static function form(Form $form): Form
     {
         return $form->schema([
