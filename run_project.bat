@@ -8,7 +8,7 @@ echo ===============================================
 echo.
 
 REM === Change this to your project folder path ===
-set PROJECT_PATH=C:\xampp\htdocs\MyLaravelApp
+set PROJECT_PATH=C:\xampp\htdocs\Ampere-Office-Management
 
 REM === Change this to your GitHub repo branch name ===
 set BRANCH=main

@@ -463,20 +463,20 @@ class InvoiceResource extends Resource
                     ->label('المبلغ النهائي')
                     ->sortable()
                     ->width('8rem')
-                    ->html()
-                    ->formatStateUsing(function ($state, Invoice $record) {
-                        $final = (float) ($record->final_amount ?? 0);
-                        $calc  = (float) ($record->calculated_total ?? 0);
-                        $finalFmt = number_format($final);
+                    // ->html()
+                    // ->formatStateUsing(function ($state, Invoice $record) {
+                    //     $final = (float) ($record->final_amount ?? 0);
+                    //     $calc  = (float) ($record->calculated_total ?? 0);
+                    //     $finalFmt = number_format($final);
 
-                        if ($final < $calc - 0.0001) {
-                            $calcFmt = number_format($calc, 2);
-                            return '<div><div><strong>'.$finalFmt.'</strong></div>'
-                                .'<div style="text-decoration:line-through;opacity:.65;font-size:.85em">'.$calcFmt.'</div></div>';
-                        }
+                    //     if ($final < $calc - 0.0001) {
+                    //         $calcFmt = number_format($calc, 2);
+                    //         return '<div><div><strong>'.$finalFmt.'</strong></div>'
+                    //             .'<div style="text-decoration:line-through;opacity:.65;font-size:.85em">'.$calcFmt.'</div></div>';
+                    //     }
 
-                        return $finalFmt;
-                    })
+                    //     return $finalFmt;
+                    // })
                     ->summarize([
                         Sum::make()
                             ->label('')

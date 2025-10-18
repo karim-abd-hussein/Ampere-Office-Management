@@ -313,6 +313,8 @@ class ListInvoices extends ListRecords
                                          'changed_meter' => 'تم تغيير العداد','changed_name'  => 'تم تغيير الاسم','active'=>'فعال','disconnected'=>'مفصول','cancelled'=>'ملغى', default=>'—',
                                     };
                                     $cycleCode = $i->cycle?->code ?? '';
+
+                                    dd($i->old_reading);
                                     return [
                                         $i->subscriber_name ?? '',
                                         $i->subscriber_phone ?? '',
@@ -320,8 +322,8 @@ class ListInvoices extends ListRecords
                                         $i->subscriber_meter_number ?? '',
                                         $i->subscriber_code_id ?? '',
                                         $cycleCode,
-                                        empty($i->old_reading) ? 0 : $i->old_reading,
-                                        empty($i->new_reading) ? 0 :$i->new_reading,
+                                        $i->old_reading??0,
+                                        is_null($i->new_reading) ? 0 :$i->new_reading,
                                         $i->consumption??0,
                                         $i->unit_price_used ?? 0,
                                         $i->final_amount ?? 0,
@@ -536,11 +538,11 @@ class ListInvoices extends ListRecords
                                 if ($newReading !== null && $newReading < $oldReading) $newReading = $oldReading;
 
                                 $unitPrice  = is_numeric($this->toFloatStr($unit))  ? (float) $this->toFloatStr($unit)  : 0;
-                                $finalInput = is_numeric($this->toFloatStr($final)) ? (float) $this->toFloatStr($final) : null;
+                                $finalInput = is_numeric($this->toFloatStr($final)) ? (float) $this->toFloatStr($final) : 0;
 
                                 $consumption = max(0, (int) (($newReading ?? 0) - $oldReading));
-                                $calcTotal   = round($consumption * $unitPrice, 2);
-                                $finalAmount = round($finalInput === null ? $calcTotal : $finalInput, 2);
+                                $calcTotal   = $consumption * $unitPrice;
+                                $finalAmount =$finalInput; //=== null ? $calcTotal : $finalInput, 2;
                                 // dd($codeId,$name);
                                 if (empty($codeId)||$name==='') {
                                     $this->counters->ignored++;
