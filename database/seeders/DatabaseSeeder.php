@@ -17,10 +17,13 @@ class DatabaseSeeder extends Seeder
         $this->call(RolesAndPermissionsSeeder::class);
 
         // إنشاء مستخدم أدمن افتراضي
-        User::create([
+       $admin = User::create([
             'name' => 'Admin',
             'email' => 'admin@example.com',
             'password' => Hash::make('password'), // غيّرها لكلمة سر قوية
         ]);
+
+                // Assign the admin role to the newly created user
+        $admin->assignRole('admin'); // Make sure 'admin' role exists from the RolesAndPermissionsSeeder
     }
 }

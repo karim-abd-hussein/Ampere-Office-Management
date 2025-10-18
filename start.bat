@@ -10,9 +10,6 @@ echo.
 REM === Change this to your project folder path ===
 set "PROJECT_PATH=C:\xampp\htdocs\Ampere-Office-Management"
 
-REM === Change this to your GitHub repo branch name ===
-set "BRANCH=main"
-
 REM === Start MySQL Service Automatically ===
 echo Starting MySQL service...
 cd /d "C:\xampp"
@@ -37,22 +34,6 @@ echo.
 
 REM === Go to project folder ===
 cd /d "%PROJECT_PATH%"
-
-REM === Pull latest changes from GitHub ===
-echo Pulling latest updates from GitHub...
-git pull origin %BRANCH%
-
-REM === Install Composer dependencies ===
-echo Installing Composer dependencies...
-composer install
-
-REM === Run database migrations ===
-echo Running migrations...
-php artisan migrate --force
-
-REM === Clear and cache Laravel config/views/routes ===
-php artisan optimize:clear
-php artisan optimize
 
 REM === Start Laravel development server ===
 echo Starting Laravel server...

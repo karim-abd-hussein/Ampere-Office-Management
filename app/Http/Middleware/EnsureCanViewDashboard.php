@@ -11,7 +11,7 @@ class EnsureCanViewDashboard
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-
+        // dd($user->hasRole('assistant'));
         // نتحرك فقط إذا المستخدم داخل على الداشبورد (/admin أو /admin/dashboard)
         $isDashboard = $request->is('admin') || $request->is('admin/') || $request->is('admin/dashboard');
 

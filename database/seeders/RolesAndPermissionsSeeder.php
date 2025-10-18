@@ -9,8 +9,8 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     public function run(): void
     {
-        // إنشاء الصلاحيات
-        $permissions = [
+           // إنشاء الصلاحيات (including those from RolePolicy)
+           $permissions = [
             'view subscribers',
             'edit readings',
             'view invoices',
@@ -18,6 +18,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'view reports',
             'manage settings',
             'manage generators',
+            // Permissions from RolePolicy:
+            'عرض الأدوار',    // view roles
+            'إضافة الأدوار',   // add roles
+            'تعديل الأدوار',   // edit roles
         ];
 
         foreach ($permissions as $permission) {
