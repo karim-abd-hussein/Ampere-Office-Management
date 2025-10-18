@@ -73,6 +73,14 @@ class Cycle extends Model
 
         $weekOfMonth = intdiv($d->day - 1, 7) + 1;
 
-        return "شهر {$d->month} أسبوع {$weekOfMonth}";
+
+         // Check if generator is loaded, if not load it
+                if (!$this->relationLoaded('generator') && $this->generator_id) {
+                    $this->load('generator');
+                }
+
+          // Access generator name through relationship
+         $generatorName = $this->generator ? $this->generator->name : 'غير محدد';
+        return "{$generatorName} ( شهر {$d->month} أسبوع {$weekOfMonth})";
     }
 }

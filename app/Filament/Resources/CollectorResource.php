@@ -83,6 +83,9 @@ class CollectorResource extends Resource
                 Tables\Columns\TextColumn::make('phone')
                     ->label('رقم الهاتف')->searchable(),
 
+              Tables\Columns\TextColumn::make('id')
+                    ->label('id')->searchable(),
+
                 TagsColumn::make('generators.name')
                     ->label('المولدات')
                     ->separator('') // بدون فواصل بين البادجات

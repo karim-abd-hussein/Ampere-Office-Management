@@ -81,6 +81,7 @@ class SubscriberResource extends Resource
 
     /** ==== الفورم ==== */
 
+
     public static function form(Form $form): Form
     {
         return $form->schema([
@@ -105,6 +106,11 @@ class SubscriberResource extends Resource
                 ->label('رقم العلبة')
                 ->maxLength(50)
                 ->nullable(),
+
+            // Forms\Components\TextInput::make('code_id')
+            //     ->label('id')
+            //     ->maxLength(50)
+            //     ->nullable(),
 
             Select::make('generator_id')
                 ->label('المولدة')
@@ -157,8 +163,9 @@ class SubscriberResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('id')->label('رقم المشترك')->sortable()->searchable(),
+                TextColumn::make('code_id')->label('id')->sortable()->searchable(),
                 TextColumn::make('name')->label('الاسم')->sortable()->searchable(),
+                 TextColumn::make('phone')->label('رقم الهاتف')->sortable()->searchable(),
                 TextColumn::make('meter_number')->label('رقم العداد')->sortable()->searchable(),
                 TextColumn::make('box_number')->label('رقم العلبة')->sortable()->searchable(),
                 TextColumn::make('generator.name')->label('المولدة')->sortable()->searchable(),
@@ -192,7 +199,7 @@ class SubscriberResource extends Resource
                 // سعر الكيلو الثابت
                 TextColumn::make('fixed_kwh_price')
                     ->label('سعر الكيلو')
-                    ->formatStateUsing(fn ($v) => is_null($v) ? '—' : number_format((float)$v, 4))
+                    ->formatStateUsing(fn ($state) => is_null($state) ? '—' : number_format((float)$state))
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->sortable(),
 

@@ -141,7 +141,7 @@ class ReceiptResource extends Resource
                     ->query(function (Builder $query, array $data) {
                         $code = trim((string)($data['code'] ?? ''));
                         if ($code === '') return $query;
-                        $id = \App\Models\Receipt::decodeShortCode($$code);
+                        $id = \App\Models\Receipt::decodeShortCode($code);
                         return $id ? $query->whereKey($id) : $query->whereRaw('0=1');
                     }),
 

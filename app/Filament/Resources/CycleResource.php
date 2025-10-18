@@ -79,6 +79,7 @@ class CycleResource extends Resource
             ->label('المولدة')
             ->relationship('generator', 'name')
             ->searchable()
+            ->preload()
             ->required(),
 
             Forms\Components\Toggle::make('is_archived')

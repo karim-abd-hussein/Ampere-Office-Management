@@ -67,6 +67,7 @@ class ListSubscribers extends ListRecords
 
                     // [['row'=>int,'name'=>string,'meter'=>string,'reason'=>string]]
                     $failed = [];
+                    $skipped = [];
 
                     /**
                      * مستورد Chunked:
@@ -74,13 +75,14 @@ class ListSubscribers extends ListRecords
                      * - يدعم use_fixed_price + fixed_kwh_price.
                      * - يمنع التكرار بالاسم فقط.
                      */
-                    $importer = new class($c, $failed, $importRef) implements ToCollection, WithChunkReading {
+                    $importer = new class($c, $failed,$skipped, $importRef) implements ToCollection, WithChunkReading {
                         private ?array $headerMap = null;
                         private int $rowNo = 1;
 
                         public function __construct(
                             private object $counters,
                             private array  &$failed,
+                            private array  &$skipped,
                             private ?string $importRef,
                         ) {}
 
@@ -114,8 +116,19 @@ class ListSubscribers extends ListRecords
                                 $fixedFlagText = $this->cell($row, $this->headerMap, ['سعر ثابت', 'use_fixed_price', 'fixed', 'fixed_price_flag']);
                                 $fixedPriceTxt = $this->cell($row, $this->headerMap, ['سعر الكيلو', 'fixed_kwh_price', 'kwh_price', 'price_per_kwh']);
 
+                                    // Notification::make()
+                                    // ->title('نتيجة الاستيراد')
+                                    // ->body("{$name} {$phone} {$meter} {$box} {$gen} {$statusText} {$fixedFlagText} {$fixedPriceTxt}")
+                                    // ->send();
+
+                                   
                                 // صف فاضي
-                                if ($name === '' && $meter === '') { $this->counters->skipped++; continue; }
+                                if ($name === '' && $meter === '') {
+                                     $this->counters->skipped++;
+                                     $this->skipped[] = ['row'=>$this->rowNo, 'name'=>'—', 'meter'=>'—', 'reason'=>'الاسم و رقم العداد فارغ']; 
+                                     continue; 
+                                    
+                                    }
 
                                 if ($name === '') {
                                     $this->counters->errors++;
@@ -126,14 +139,19 @@ class ListSubscribers extends ListRecords
                                 // المولّدة (ID/Code/Name)
                                 $generatorId = null;
                                 if ($gen !== '') {
+                                     
                                     if (is_numeric($gen)) {
+                                        
                                         $generatorId = Generator::whereKey((int)$gen)->value('id');
+                                        
                                     } else {
                                         $generatorId = Generator::where('code', $gen)
                                             ->orWhere('name', $gen)
                                             ->value('id');
                                     }
+                                   
                                 }
+                                
 
                                 // الحالة
                                 $status = $this->mapStatus($statusText) ?? 'active';
@@ -156,10 +174,12 @@ class ListSubscribers extends ListRecords
                                 // ====== منع التكرار (بالاسم فقط) ======
                                 $exists = Subscriber::query()
                                     ->where('name', $name)
+                                    ->where('generator_id', $generatorId)
                                     ->exists();
 
                                 if ($exists) {
                                     $this->counters->skipped++;
+                                    $this->skipped[] = ['row'=>$this->rowNo, 'name'=> $name, 'generator_id' => $generatorId, 'reason'=>'هذا الاسم متكرر عند نفس المولدة']; 
                                     continue;
                                 }
                                 // ======================================
@@ -268,33 +288,84 @@ class ListSubscribers extends ListRecords
                         }
                     };
 
+                    try {
                     // تنفيذ الاستيراد
                     Excel::import($importer, $fullPath);
 
                     // حذف الملف المؤقت
-                    try { Storage::disk('local')->delete($relative); } catch (\Throwable $e) {}
+                    // try { Storage::disk('local')->delete($relative); } catch (\Throwable $e) {}
 
-                    $success     = $c->created;
-                    $failedCount = $c->errors;
+                $success = $c->created;
+                $skippedCount = $c->skipped;
+                $failedCount = $c->errors;
 
-                    // أسماء الفاشلين فقط
-                    $failedNames = array_map(
-                        fn($f) => (string)($f['name'] ?? '—'),
-                        $failed
-                    );
+                // أسماء الفاشلين فقط
+                $failedNames = array_map(
+                    fn($f) => (string)($f['name'] ?? '—'),
+                    $failed
+                );
 
-                    $body = "نجح: {$success}\nفشل: {$failedCount}";
-                    if ($failedCount > 0) {
-                        $body .= "\nالأسماء:\n" . implode("\n", $failedNames);
-                    }
+                $skippedNames = array_map(
+                    fn($f) => (string)($f['name'] ?? '—'),
+                    $skipped
+                );
 
+                $body = "✅ **نتيجة الاستيراد**\n";
+                $body .= "────────────────────\n";
+                $body .= "• ✅ نجح: {$success} فاتورة\n";
+                $body .= "• ❌ فشل: {$failedCount} فاتورة\n"; 
+                $body .= "• ⚠️  تجاهل: {$skippedCount} فاتورة\n";
+
+                if ($failedCount > 0) {
+                    $body .= "\n📋 **الأسماء المرفوضة:**\n";
+                    $body .= implode("\n• ", $failedNames);
+                }
+
+                if ($skippedCount > 0) {
+                    $body .= "\n\n📝 **الأسماء التي تم تجاهلها:**\n";
+                    $body .= implode("\n• ", $skippedNames);
+                }
+
+               
+                    // Immediate UI notification (user sees it now)
                     Notification::make()
-                        ->title('نتيجة الاستيراد')
+                        ->title('نتيجة استيراد المشتركين') 
                         ->body($body)
+                        ->success() // or warning()/danger() based on results
+                        ->persistent()
                         ->send();
+                     if ($user = auth()->user()) {
+                    // Persistent database notification (user can see it later)
+                    Notification::make()
+                        ->title('نتيجة استيراد المشتركين') 
+                        ->body($body)
+                        ->success() // same type as above
+                        ->sendToDatabase($user);
+                    }
 
                     // حدّث الجدول
                     $this->dispatch('refresh');
+
+                 } catch (\Throwable $e) {
+                        report($e);
+                        Notification::make()
+                            ->title('فشل الاستيراد')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->persistent()
+                            ->send();
+                            
+
+                        if ($user = auth()->user()) {
+                            Notification::make()->title('فشل الاستيراد')->body($e->getMessage())->danger()->sendToDatabase($user);
+                        }
+                    } finally {
+                        if (!empty($relative) && Storage::disk('local')->exists($relative)) {
+                            Storage::disk('local')->delete($relative);
+                        }
+                    }
+
+
                 }),
         ];
     }

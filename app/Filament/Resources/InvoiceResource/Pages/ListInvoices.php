@@ -87,9 +87,20 @@ class ListInvoices extends ListRecords
                     DatePicker::make('subscription_date')->label('تاريخ الاشتراك')->default(now())->required(),
                 ])
                 ->action(function (array $data) {
-                    $cycle = $this->getLatestCycle();
+                    $gen_id=(int) $data['generator_id'];
+                    $cycle =Cycle::query()
+                        ->where('is_archived', 0)
+                        ->where('generator_id',$gen_id)
+                        ->orderByDesc('start_date')
+                        ->orderByDesc('id')
+                        ->first(); 
+                    //$this->getLatestCycle();
+
                     if (! $cycle) {
                         Notification::make()->title('لا توجد دورات بعد')->body('أضِف دورة أولاً.')->danger()->persistent()->send();
+                        if ($user = auth()->user()) {
+                        Notification::make()->title('لا توجد دورات بعد')->body('أضِف دورة أولاً.')->danger()->sendToDatabase($user);
+                        }
                         return;
                     }
 
@@ -106,24 +117,39 @@ class ListInvoices extends ListRecords
                                 'subscription_date' => $data['subscription_date'],
                             ]);
 
-                            $unit = (float) ($sub->generator?->price_per_kwh ?? 0);
+                            $unit = 0;
+                            // (float) ($sub->generator?->price_per_kwh ?? 0);
+                            // if($sub->use_fixed_price){
+                            //         $unit = $sub->fixed_kwh_price;
+                            //         }
 
-                            Invoice::create([
-                                'subscriber_id'    => $sub->id,
-                                'generator_id'     => $sub->generator_id,
-                                'collector_id'     => null,
-                                'cycle_id'         => $cycle->id,
-                                'issued_at'        => now(),
-                                'old_reading'      => 0,
-                                'new_reading'      => null,
-                                'consumption'      => 0,
-                                'unit_price_used'  => $unit,
-                                'calculated_total' => 0,
-                                'final_amount'     => 0,
-                            ]);
+                                 Invoice::create([
+                                            'subscriber_code_id'  => $sub->code_id,
+                                            'subscriber_name'  => $sub->name,
+                                            'subscriber_phone'  => $sub->phone,
+                                            'subscriber_meter_number'  =>  $sub->meter_number,
+                                            'subscriber_use_fixed_price'  => $sub->use_fixed_price==1 ?true : false,
+                                            'subscriber_status'  => $sub->status,
+
+                                            'subscriber_id'    => $sub->id,
+                                            'generator_id'     => $sub->generator_id,
+                                            'collector_id'     => null,
+                                            'cycle_id'         =>  $cycle->id,
+                                            'issued_at'        =>now(),
+                                            'old_reading'      => 0,
+                                            'new_reading'      => null,
+                                            'consumption'      => 0,
+                                            'unit_price_used'  => $unit,
+                                            'calculated_total' => 0,
+                                            'final_amount'     => 0,
+                                        ]);
+
                         });
 
-                        Notification::make()->title('تمت إضافة المشترك وإنشاء فاتورة')->success()->send();
+                        Notification::make()->title("تمت إضافة المشترك  وإنشاء فاتورة")->success()->persistent()->send();
+                       if ($user = auth()->user()) {
+                        Notification::make()->title("تمت إضافة المشترك  وإنشاء فاتورة")->success()->sendToDatabase($user);
+                        }
                         $this->dispatch('refresh');
                     } catch (Throwable $e) {
                         report($e);
@@ -142,26 +168,28 @@ class ListInvoices extends ListRecords
                 ->modalHeading('توليد فواتير الدورة')
                 ->form([
                     Select::make('cycle_id')->label('اختر الدورة')
-                        ->options(fn () => Cycle::query()->orderByDesc('start_date')->get()->mapWithKeys(fn($c)=>[$c->id=>$c->code])->all())
+                        ->options(fn () =>  Cycle::query()->where('is_archived',0)->orderByDesc('start_date')->get()->mapWithKeys(fn($c)=>[$c->id=>$c->code])->all())
                         ->searchable()->required(),
-                    Select::make('collector_id')->label('الجابي (اختياري)')
-                        ->options(fn () => Collector::query()->orderBy('name')->pluck('name','id')->all())
-                        ->searchable()->nullable(),
+                    // Select::make('collector_id')->label('الجابي (اختياري)')
+                    //     ->options(fn () => Collector::query()->orderBy('name')->pluck('name','id')->all())
+                    //     ->searchable()->nullable(),
                 ])
                 ->action(function (array $data) {
                     $cycleId = (int) $data['cycle_id'];
-                    $collectorId = $data['collector_id'] ?? null;
+                     $collectorId =0; //$data['collector_id'] ?? null;
 
                     try {
                         $created = 0;
                         DB::transaction(function () use ($cycleId, $collectorId, &$created) {
-                            $base = (optional(Cycle::find($cycleId))->start_date)
-                                ? \Illuminate\Support\Carbon::parse(optional(Cycle::find($cycleId))->start_date)->startOfDay()
+                            $cycle = Cycle::find($cycleId);
+                            $base = (optional($cycle)->start_date)
+                                ? \Illuminate\Support\Carbon::parse(optional($cycle)->start_date)->startOfDay()
                                 : now()->startOfDay();
                             $offset = 0;
 
                             Subscriber::query()
                                 ->with(['generator:id,price_per_kwh'])
+                                ->where('generator_id', $cycle->generator_id)
                                 ->orderBy('id')
                                 ->chunkById(500, function ($subs) use ($cycleId, $collectorId, &$created, $base, &$offset) {
                                     foreach ($subs as $sub) {
@@ -169,14 +197,37 @@ class ListInvoices extends ListRecords
                                             continue;
                                         }
 
-                                        $prevNewReading = Invoice::query()
+                                        $lastInvoice = Invoice::query()
                                             ->where('subscriber_id', $sub->id)
-                                            ->orderByDesc('issued_at')->orderByDesc('id')
-                                            ->value('new_reading') ?? 0;
+                                            ->orderByDesc('issued_at')->orderByDesc('id')->first();
 
-                                        $unit = (float) ($sub->generator?->price_per_kwh ?? 0);
+
+                                            $collectorId=null;
+                                            $prevNewReading=0;
+                                            $status="active";
+                                            if(!is_null($lastInvoice)){
+
+                                                $collectorId=$lastInvoice->collector_id;
+                                                $prevNewReading=$lastInvoice->new_reading??0;
+                                                $status=$lastInvoice->subscriber_status;
+                                            }
+                                            // dd($prevNewReading);
+                                            //->value('new_reading') ?? 0;
+
+                                         $unit = (float) ($sub->generator?->price_per_kwh ?? 0);
+                                            if($sub->use_fixed_price){
+                                               $unit = $sub->fixed_kwh_price;
+                                            }
+                                       
 
                                         Invoice::create([
+
+                                            'subscriber_name'  => $sub->name,
+                                            'subscriber_phone'  => $sub->phone,
+                                            'subscriber_meter_number'  =>  $sub->meter_number,
+                                            'subscriber_use_fixed_price'  => $sub->use_fixed_price,
+                                            'subscriber_status'  => $status,
+                                            'subscriber_code_id'  => $sub->code_id,
                                             'subscriber_id'    => $sub->id,
                                             'generator_id'     => $sub->generator_id,
                                             'collector_id'     => $collectorId,
@@ -195,11 +246,17 @@ class ListInvoices extends ListRecords
                                 });
                         });
 
-                        Notification::make()->title("تم توليد {$created} فاتورة جديدة")->success()->send();
-                        $this->dispatch('refresh');
+                        Notification::make()->title("تم توليد {$created} فاتورة جديدة")->success()->persistent()->send();
+                    if ($user = auth()->user()) {
+                        Notification::make()->title("تم توليد {$created} فاتورة جديدة")->success()->sendToDatabase($user);
+                        }
+                         $this->dispatch('refresh');
                     } catch (Throwable $e) {
                         report($e);
                         Notification::make()->title('فشل توليد الفواتير')->body($e->getMessage())->danger()->persistent()->send();
+                          if ($user = auth()->user()) {
+                        Notification::make()->title('فشل توليد الفواتير')->body($e->getMessage())->danger()->sendToDatabase($user);
+                        }
                     }
                 }),
 
@@ -211,13 +268,17 @@ class ListInvoices extends ListRecords
                 ->modalHeading('تصدير إلى إكسل')
                 ->form([
                     Select::make('cycle_ids')->label('اختر دورة/دورات')
-                        ->options(fn () => Cycle::query()->orderByDesc('start_date')->get()->mapWithKeys(fn($c)=>[$c->id=>$c->code])->all())
+                        ->options(fn () => Cycle::query()->where('is_archived',0)->orderByDesc('start_date')->get()->mapWithKeys(fn($c)=>[$c->id=>$c->code])->all())
                         ->multiple()->required()->preload()->searchable(),
                 ])
                 ->action(function (array $data) {
                     $ids = array_map('intval', $data['cycle_ids'] ?? []);
                     if (empty($ids)) {
                         Notification::make()->title('الرجاء اختيار دورة واحدة على الأقل')->danger()->send();
+
+                     if ($user = auth()->user()) {
+                        Notification::make()->title('الرجاء اختيار دورة واحدة على الأقل')->danger()->sendToDatabase($user);
+                         }
                         return;
                     }
 
@@ -225,6 +286,7 @@ class ListInvoices extends ListRecords
                     $fileLabel = count($codes) === 1 ? $codes[0] : ('دورات مختارة - ' . implode('، ', array_slice($codes, 0, 3)) . (count($codes) > 3 ? '…' : ''));
                     $file = 'فواتير ' . $fileLabel . '.xlsx';
 
+                     Notification::make()->title('تصدير الفواتير')->body("تم تجهيز ملف التصدير: {$file}")->success()->send();
                     if ($user = auth()->user()) {
                         Notification::make()->title('تصدير الفواتير')->body("تم تجهيز ملف التصدير: {$file}")->success()->sendToDatabase($user);
                     }
@@ -235,31 +297,36 @@ class ListInvoices extends ListRecords
                             public function collection()
                             {
                                 $q = \App\Models\Invoice::query()
-                                    ->with(['subscriber:id,name,phone,status,box_number,meter_number','cycle:id,start_date'])
-                                    ->select(['subscriber_id','cycle_id','old_reading','new_reading','consumption','unit_price_used','final_amount','issued_at'])
+                                    ->with(['subscriber:id,name,phone,status,box_number,meter_number',
+                                    'cycle:id,start_date,generator_id', // ✅ Include generator_id
+                                    'cycle.generator:id,name', // ✅ Load generator relationship
+                                    'collector:id,name'])
+                                    ->select(['subscriber_id','subscriber_name','subscriber_phone','subscriber_box_number','subscriber_meter_number','subscriber_code_id','subscriber_status','cycle_id','old_reading','new_reading','consumption','unit_price_used','final_amount','issued_at','collector_id'])
                                     ->whereIn('cycle_id', $this->cycleIds)
                                     ->orderBy('cycle_id','desc')
                                     ->orderBy('issued_at','asc')
                                     ->orderBy('id','asc');
 
                                 return $q->get()->map(function (\App\Models\Invoice $i) {
-                                    $statusAr = match ($i->subscriber->status ?? null) {
-                                        'active'=>'فعال','disconnected'=>'مفصول','cancelled'=>'ملغى', default=>'—',
+                                    $statusAr = match ($i->subscriber_status ?? null) {
+
+                                         'changed_meter' => 'تم تغيير العداد','changed_name'  => 'تم تغيير الاسم','active'=>'فعال','disconnected'=>'مفصول','cancelled'=>'ملغى', default=>'—',
                                     };
                                     $cycleCode = $i->cycle?->code ?? '';
                                     return [
-                                        $i->subscriber->name ?? '',
-                                        $i->subscriber->phone ?? '',
-                                        $i->subscriber->box_number ?? '',
-                                        $i->subscriber->meter_number ?? '',
-                                        (int) ($i->subscriber_id ?? 0),
+                                        $i->subscriber_name ?? '',
+                                        $i->subscriber_phone ?? '',
+                                        $i->subscriber_box_number?? '',
+                                        $i->subscriber_meter_number ?? '',
+                                        $i->subscriber_code_id ?? '',
                                         $cycleCode,
-                                        is_null($i->old_reading) ? '' : (float) $i->old_reading,
-                                        is_null($i->new_reading) ? '' : (float) $i->new_reading,
-                                        (float) ($i->consumption ?? 0),
-                                        (float) ($i->unit_price_used ?? 0),
-                                        (float) ($i->final_amount ?? 0),
+                                        empty($i->old_reading) ? 0 : $i->old_reading,
+                                        empty($i->new_reading) ? 0 :$i->new_reading,
+                                        $i->consumption??0,
+                                        $i->unit_price_used ?? 0,
+                                        $i->final_amount ?? 0,
                                         $statusAr,
+                                        $i->collector?->name ?? '—', // ✅ ADDED COLLECTOR NAME
                                     ];
                                 });
                             }
@@ -268,16 +335,16 @@ class ListInvoices extends ListRecords
                                 return [
                                     'المشترك','رقم الهاتف','رقم العلبة','رقم العداد','ID المشترك',
                                     'الدورة','القراءة القديمة','القراءة الجديدة','الاستهلاك',
-                                    'سعر الكيلو','المبلغ النهائي','الحالة'
+                                    'سعر الكيلو','المبلغ النهائي','الحالة','الجابي'
                                 ];
                             }
                             public function styles(Worksheet $sheet): array
                             {
-                                $sheet->getStyle('A1:L1')->getFont()->setBold(true);
-                                $sheet->getStyle('A1:L1')->getAlignment()
+                                $sheet->getStyle('A1:M1')->getFont()->setBold(true);
+                                $sheet->getStyle('A1:M1')->getAlignment()
                                     ->setHorizontal(Alignment::HORIZONTAL_CENTER)
                                     ->setVertical(Alignment::VERTICAL_CENTER);
-                                $sheet->getStyle('A1:L1')->getFill()->setFillType(Fill::FILL_NONE);
+                                $sheet->getStyle('A1:M1')->getFill()->setFillType(Fill::FILL_NONE);
                                 return [];
                             }
                             public function registerEvents(): array
@@ -288,11 +355,11 @@ class ListInvoices extends ListRecords
                                         $ws->setRightToLeft(true);
                                         $last = (int) $ws->getHighestRow();
                                         if ($last >= 2) {
-                                            $ws->getStyle("A2:L{$last}")->getAlignment()
+                                            $ws->getStyle("A2:M{$last}")->getAlignment()
                                                 ->setHorizontal(Alignment::HORIZONTAL_CENTER)
                                                 ->setVertical(Alignment::VERTICAL_CENTER);
                                         }
-                                        $ws->getStyle("A1:L{$last}")->applyFromArray([
+                                        $ws->getStyle("A1:M{$last}")->applyFromArray([
                                             'borders' => [
                                                 'allBorders' => [
                                                     'borderStyle' => Border::BORDER_THIN,
@@ -301,18 +368,18 @@ class ListInvoices extends ListRecords
                                             ],
                                         ]);
                                         for ($r = 2; $r <= $last; $r++) {
-                                            $status = (string) $ws->getCell("L{$r}")->getValue();
+                                            $status = (string) $ws->getCell("M{$r}")->getValue();
                                             if (in_array($status, ['مفصول','ملغى'], true)) {
-                                                $ws->getStyle("A{$r}:L{$r}")
+                                                $ws->getStyle("A{$r}:M{$r}")
                                                     ->getFill()->setFillType(Fill::FILL_SOLID)
                                                     ->getStartColor()->setARGB('FFFFFF00');
                                             } else {
                                                 if ($r % 2 === 0) {
-                                                    $ws->getStyle("A{$r}:L{$r}")
+                                                    $ws->getStyle("A{$r}:M{$r}")
                                                         ->getFill()->setFillType(Fill::FILL_SOLID)
                                                         ->getStartColor()->setARGB('FFF2F2F2');
                                                 } else {
-                                                    $ws->getStyle("A{$r}:L{$r}")
+                                                    $ws->getStyle("A{$r}:M{$r}")
                                                         ->getFill()->setFillType(Fill::FILL_NONE);
                                                 }
                                             }
@@ -333,7 +400,7 @@ class ListInvoices extends ListRecords
                 ->modalHeading('استيراد فواتير من إكسل')
                 ->form([
                     Select::make('cycle_id')->label('اختر الدورة لإضافة/تحديث الفواتير')
-                        ->options(fn () => Cycle::query()->orderByDesc('start_date')->get()->mapWithKeys(fn($c)=>[$c->id=>$c->code])->all())
+                        ->options(fn () => Cycle::query()->where('is_archived',0)->orderByDesc('start_date')->get()->mapWithKeys(fn($c)=>[$c->id=>$c->code])->all())
                         ->searchable()->required(),
                     FileUpload::make('file')->label('ملف إكسل (.xlsx)')
                         ->acceptedFileTypes(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','.xlsx'])
@@ -355,6 +422,10 @@ class ListInvoices extends ListRecords
                     $storedPath = $data['file'] ?? null;
                     if (! $storedPath) {
                         Notification::make()->title('لم يتم اختيار ملف')->danger()->send();
+
+                    if ($user = auth()->user()) {
+                           Notification::make()->title('لم يتم اختيار ملف')->danger()->sendToDatabase($user);
+                                }
                         return;
                     }
                     $path = Storage::disk('local')->path($storedPath);
@@ -362,10 +433,14 @@ class ListInvoices extends ListRecords
                     $cycle = Cycle::find($cycleId);
                     $base  = $cycle && $cycle->start_date ? Carbon::parse($cycle->start_date)->startOfDay() : now()->startOfDay();
 
-                    $c = (object)['created' => 0, 'updated' => 0, 'skipped' => 0, 'ignored' => 0];
+                    $importRef = pathinfo($storedPath, PATHINFO_BASENAME);
+
+
+                    $c = (object)['sub_created' => 0,'created' => 0, 'updated' => 0, 'skipped' => 0, 'ignored' => 0];
                     $failedRows = [];
 
-                    $importer = new class($cycleId, $base, $c, $failedRows) implements ToCollection, WithChunkReading {
+                    // start the class
+                    $importer = new class($cycleId, $base, $c, $failedRows,$importRef) implements ToCollection, WithChunkReading {
                         private ?array $headerMap = null;
                         private int $rowNo = 1;
 
@@ -374,6 +449,7 @@ class ListInvoices extends ListRecords
                             private \Illuminate\Support\Carbon $base,
                             private object $counters,
                             private array &$failedRows,
+                             private ?string $importRef,
                         ) {}
 
                         public function collection(Collection $rowsCol)
@@ -381,22 +457,48 @@ class ListInvoices extends ListRecords
                             if ($rowsCol->isEmpty()) return;
 
                             if ($this->headerMap === null) {
+                                // dd($rowsCol->get(4));
                                 $headers = $this->normalizeRow($rowsCol->first());
                                 $headers = array_map(fn($v) => is_string($v) ? trim($v) : $v, $headers);
                                 $this->headerMap = $this->buildHeaderMap($headers);
 
                                 // تحقّق وجود الأعمدة المطلوبة واذكر المفقود بالتحديد
                                 $missing = [];
-                                if (! $this->hasAny($this->oldKeys()))   $missing[] = 'القراءة القديمة';
-                                if (! $this->hasAny($this->newKeys()))   $missing[] = 'القراءة الجديدة';
-                                if (! $this->hasAny($this->unitKeys()))  $missing[] = 'سعر الكيلو';
-                                if (! $this->hasAny($this->finalKeys())) $missing[] = 'المبلغ النهائي';
+                                if (! $this->hasAny($this->oldKeys()))   $missing[] = 'old_reading';
+                                if (! $this->hasAny($this->newKeys()))   $missing[] = 'new_reading';
+                                if (! $this->hasAny($this->unitKeys()))  $missing[] = 'unit';
+                                if (! $this->hasAny($this->finalKeys())) $missing[] = 'final_amount';
+                                if (! $this->hasAny(['id','code_id','subscriber_code_id'])) $missing[] = 'id';
+                                // if (! $this->hasAny($this->finalKeys())) $missing[] = 'final_amount';
+                                // if (! $this->hasAny($this->finalKeys())) $missing[] = 'final_amount';
 
                                 if (!empty($missing)) {
                                     $seen = implode(' | ', array_keys($this->headerMap));
+
+                                     Notification::make()
+                                    ->title('فشل الاستيراد')
+                                    ->body(
+                                        'الملف ينقصه الأعمدة: ' . implode(' + ', $missing) .
+                                        "\nالعناوين الموجودة بعد التطبيع: {$seen} عنواين القالب يجب أن تتبع النمط المعروف "
+                                    ) // ← User sees the error message
+                                    ->danger()
+                                    ->persistent()
+                                    ->send();
+
+                                       if ($user = auth()->user()) {
+                                            Notification::make()->title('فشل الاستيراد')
+                                    ->body(
+                                        'الملف ينقصه الأعمدة: ' . implode(' + ', $missing) .
+                                        "\nالعناوين الموجودة بعد التطبيع: {$seen} عنواين القالب يجب أن تتبع النمط المعروف "
+                                    ) // ← User sees the error message
+                                    ->danger()
+                                    ->sendToDatabase($user);
+                                        }
+
+
                                     throw new \RuntimeException(
                                         'الملف ينقصه الأعمدة: ' . implode(' + ', $missing) .
-                                        "\nالعناوين الموجودة بعد التطبيع: {$seen}"
+                                        "\nالعناوين الموجودة بعد التطبيع: {$seen} عنواين القالب يجب أن تتبع النمط المعروف"
                                     );
                                 }
 
@@ -405,107 +507,231 @@ class ListInvoices extends ListRecords
                                 $dataRows = $rowsCol;
                             }
 
+                          $cycle = \App\Models\Cycle::find($this->cycleId);
+
+
                             foreach ($dataRows as $rowItem) {
                                 $this->rowNo++;
                                 $row = $this->normalizeRow($rowItem);
 
                                 $name  = $this->cell($row, $this->headerMap, $this->nameKeys());
+                                // $collectorId  = $this->cell($row, $this->headerMap, $this->collectorKeys());
+                                $phone  = $this->cell($row, $this->headerMap, $this->phoneKeys());
+                                $useFixedPrice  = $this->cell($row, $this->headerMap, $this->useFixedPriceKeys());
+                                $fixedPriceTxt = $this->cell($row, $this->headerMap, ['سعر الكيلو', 'fixed_kwh_price', 'kwh_price', 'price_per_kwh']);
                                 $meter = $this->cell($row, $this->headerMap, $this->meterKeys());
-                                $idRaw = $this->cell($row, $this->headerMap, $this->idKeys());
-
-                                if (trim($name) === '' && trim($meter) === '' && trim($idRaw) === '') {
-                                    $this->counters->ignored++;
-                                    continue;
-                                }
-
-                                $subscriberId = 0; $reason = '';
-
-                                if (is_numeric($idRaw) && (int)$idRaw > 0 && \App\Models\Subscriber::whereKey((int)$idRaw)->exists()) {
-                                    $subscriberId = (int) $idRaw;
-                                }
-
-                                if ($subscriberId <= 0 && $meter !== '') {
-                                    $cands = \App\Models\Subscriber::where('meter_number', $meter)->orderBy('id')->get(['id','name']);
-                                    if ($cands->count() === 1) {
-                                        $subscriberId = (int) $cands->first()->id;
-                                    } elseif ($cands->count() > 1) {
-                                        if ($name !== '') {
-                                            $match = $cands->firstWhere(fn ($s) => trim($s->name) === trim($name));
-                                            $subscriberId = (int) ($match?->id ?? $cands->first()->id);
-                                        } else {
-                                            $reason = 'رقم عداد مكرر بدون اسم';
-                                        }
-                                    } else {
-                                        $reason = 'رقم العداد غير موجود';
-                                    }
-                                }
-
-                                if ($subscriberId <= 0 && $name !== '') {
-                                    $ids = \App\Models\Subscriber::where('name', $name)->orderBy('id')->pluck('id');
-                                    if ($ids->count() >= 1) $subscriberId = (int) $ids->first();
-                                    else $reason = $reason ?: 'الاسم غير موجود';
-                                }
-
-                                if ($subscriberId <= 0) {
-                                    $this->counters->skipped++;
-                                    $this->failedRows[] = ['row'=>$this->rowNo, 'name'=>$name ?: '—', 'meter'=>$meter ?: '—', 'reason'=>$reason ?: 'تعذر تحديد المشترك'];
-                                    continue;
-                                }
-
+                                // $idRaw = $this->cell($row, $this->headerMap, $this->idKeys());
+                                $codeId = $this->cell($row, $this->headerMap, ['id','code_id','subscriber_code_id']);
+                                
                                 $old   = $this->cell($row, $this->headerMap, $this->oldKeys(), disallowMeter:true);
                                 $new   = $this->cell($row, $this->headerMap, $this->newKeys(), disallowMeter:true);
                                 $unit  = $this->cell($row, $this->headerMap, $this->unitKeys());
                                 $final = $this->cell($row, $this->headerMap, $this->finalKeys());
-
-                                $meterIdx = $this->headerIndex($this->meterKeys());
-                                $oldIdx   = $this->headerIndex($this->oldKeys());
-                                $newIdx   = $this->headerIndex($this->newKeys());
-                                if ($meterIdx !== null && ($oldIdx === $meterIdx || $newIdx === $meterIdx)) {
-                                    $this->counters->skipped++;
-                                    $this->failedRows[] = ['row'=>$this->rowNo, 'name'=>$name ?: '—', 'meter'=>$meter ?: '—', 'reason'=>'عمود القراءة يطابق عمود رقم العداد'];
-                                    continue;
-                                }
+                                $subscriberStatus = $this->cell($row, $this->headerMap, $this->statusKeys());
+                                //dd($subscriberStatus);
+                                $issuedAt = $this->base->copy()->addSeconds(max(0, $this->rowNo - 2));
 
                                 $oldReading = $this->toInt($old);
                                 $newReading = ($new === '' || $new === null) ? null : $this->toInt($new);
                                 if ($newReading !== null && $newReading < $oldReading) $newReading = $oldReading;
 
-                                $unitPrice  = is_numeric($this->toFloatStr($unit))  ? (float) $this->toFloatStr($unit)  : 0.0;
+                                $unitPrice  = is_numeric($this->toFloatStr($unit))  ? (float) $this->toFloatStr($unit)  : 0;
                                 $finalInput = is_numeric($this->toFloatStr($final)) ? (float) $this->toFloatStr($final) : null;
 
                                 $consumption = max(0, (int) (($newReading ?? 0) - $oldReading));
                                 $calcTotal   = round($consumption * $unitPrice, 2);
                                 $finalAmount = round($finalInput === null ? $calcTotal : $finalInput, 2);
-
-                                $issuedAt = $this->base->copy()->addSeconds(max(0, $this->rowNo - 2));
-                                $genId = \App\Models\Subscriber::whereKey($subscriberId)->value('generator_id');
-
-                                $invoice = \App\Models\Invoice::query()
-                                    ->where('subscriber_id', $subscriberId)
-                                    ->where('cycle_id', $this->cycleId)
-                                    ->first();
-
-                                $payload = [
-                                    'subscriber_id'    => $subscriberId,
-                                    'generator_id'     => $genId,
-                                    'cycle_id'         => $this->cycleId,
-                                    'issued_at'        => $issuedAt,
-                                    'old_reading'      => $oldReading,
-                                    'new_reading'      => $newReading,
-                                    'consumption'      => $consumption,
-                                    'unit_price_used'  => $unitPrice,
-                                    'calculated_total' => $calcTotal,
-                                    'final_amount'     => $finalAmount,
-                                ];
-
-                                if ($invoice) {
-                                    $invoice->fill($payload)->save();
-                                    $this->counters->updated++;
-                                } else {
-                                    \App\Models\Invoice::create($payload);
-                                    $this->counters->created++;
+                                // dd($codeId,$name);
+                                if (empty($codeId)||$name==='') {
+                                    $this->counters->ignored++;
+                                    $this->failedRows[] = ['type'=>'ignored','row'=>$this->rowNo,'code_id'=>$codeId?: '—' , 'name'=>$name ?: '—', 'meter'=>$meter ?: '—', 'reason'=>'لايحوي أسم او id'];
+                                    continue;
                                 }
+
+                                // dd($name, $phone ,$useFixedPrice,$fixedPriceTxt,$meter,$codeId,$old,$new, $unit,$final,$subscriberStatus,$issuedAt);
+
+                                $subscriberId = 0; $reason = '';
+                                  $sub = \App\Models\Subscriber::where('code_id', $codeId)->first();
+                               
+                                if (!is_null($sub)) {
+
+                                    // check name
+
+                                    if($name===trim($sub->name)){
+
+                                        // create invoces
+                                           $payload = [
+                                                    'subscriber_code_id'  => $codeId,
+                                                    'subscriber_name'  => $name,
+                                                    'subscriber_phone'  => $phone,
+                                                    'subscriber_meter_number'  =>  $meter,
+                                                    'subscriber_use_fixed_price'  => $useFixedPrice==1 ?true : false,
+                                                    'subscriber_id'    => $sub->id,
+                                                    'subscriber_status'  => empty($subscriberStatus)?'active':$subscriberStatus,
+                                                    'generator_id'     => $sub->generator_id,
+                                                    'collector_id'  => $sub->collector_id, 
+                                                    'cycle_id'         => $this->cycleId,
+                                                    'issued_at'        => $issuedAt,
+                                                    'old_reading'      => $oldReading,
+                                                    'new_reading'      => $newReading,
+                                                    'consumption'      => $consumption,
+                                                    'unit_price_used'  => $unitPrice,
+                                                    'calculated_total' => $calcTotal,
+                                                    'final_amount'     => $finalAmount,
+                                              ];
+
+                                      \App\Models\Invoice::create($payload);
+                                    $this->counters->created++;
+
+
+                                    }else{
+
+                                     $this->counters->skipped++;
+                                    $this->failedRows[] = ['type'=>'skipped','row'=>$this->rowNo,'code_id'=>$codeId , 'name'=>$name ?: '—', 'meter'=>$meter ?: '—', 'reason'=>$reason ?: 'تطابف ال id مع أختلاف ألاسم'];
+
+                                    }
+                                    
+                                }else{
+
+
+                                   $sub= \App\Models\Subscriber::create([
+                                        'name'              => $name,
+                                        'phone'             => $phone,
+                                        'box_number'        => NULL,
+                                        'meter_number'      => $meter,
+                                        'generator_id'      => $cycle->generator_id,
+                                        'status'            => empty($subscriberStatus)?'active':$subscriberStatus,
+                                        'subscription_date' => now()->toDateString(),
+                                        'import_ref'        => $this->importRef, // اسم ملف الإكسل
+                                        'use_fixed_price'   => $useFixedPrice==1 ?true : false,
+                                        'fixed_kwh_price'   =>  trim($fixedPriceTxt)===''?NULL:(int)$fixedPriceTxt,
+                                        'code_id'  => $codeId,
+                                    ]);
+
+                                    if($sub){
+                                     $this->counters->sub_created++;
+
+
+                                       $payload = [
+                                                'subscriber_code_id'  => $codeId,
+                                                'subscriber_name'  => $name,
+                                                'subscriber_phone'  => $phone,
+                                                'subscriber_meter_number'  =>  $meter,
+                                                'subscriber_use_fixed_price'  => $useFixedPrice==1 ?true : false,
+                                                'subscriber_id'    => $sub->id,
+                                                'subscriber_status'  => empty($subscriberStatus)?'active':$subscriberStatus,
+                                                'generator_id'     => $sub->generator_id,
+                                                'collector_id'  => $sub->collector_id, 
+                                                'cycle_id'         => $this->cycleId,
+                                                'issued_at'        => $issuedAt,
+                                                'old_reading'      => $oldReading,
+                                                'new_reading'      => $newReading,
+                                                'consumption'      => $consumption,
+                                                'unit_price_used'  => $unitPrice,
+                                                'calculated_total' => $calcTotal,
+                                                'final_amount'     => $finalAmount,
+                                              ];
+
+                                      \App\Models\Invoice::create($payload);
+                                    $this->counters->created++;
+
+                                            }else{
+                                          $this->counters->ignored++;
+                                           $this->failedRows[] = ['type'=>'ignored','row'=>$this->rowNo,'code_id'=>$codeId ?: '—', 'name'=>$name ?: '—', 'meter'=>$meter ?: '—', 'reason'=>'فشل أدخل المستخدم الي قاعدة البيانات'];
+                                              continue;
+
+                                            }
+                                }
+
+                                // if ($subscriberId <= 0 && $meter !== '') {
+                                //     $cands = \App\Models\Subscriber::where('meter_number', $meter)->orderBy('id')->get(['id','name']);
+                                //     if ($cands->count() === 1) {
+                                //         $subscriberId = (int) $cands->first()->id;
+                                //     } elseif ($cands->count() > 1) {
+                                //         if ($name !== '') {
+                                //             $match = $cands->firstWhere(fn ($s) => trim($s->name) === trim($name));
+                                //             $subscriberId = (int) ($match?->id ?? $cands->first()->id);
+                                //         } else {
+                                //             $reason = 'رقم عداد مكرر بدون اسم';
+                                //         }
+                                //     } else {
+                                //         $reason = 'رقم العداد غير موجود';
+                                //     }
+                                // }
+
+                                // if ($subscriberId <= 0 && $name !== '') {
+                                //     $ids = \App\Models\Subscriber::where('name', $name)->orderBy('id')->pluck('id');
+                                //     if ($ids->count() >= 1) $subscriberId = (int) $ids->first();
+                                //     else $reason = $reason ?: 'الاسم غير موجود';
+                                // }
+
+                                // if ($subscriberId <= 0) {
+                                //     $this->counters->skipped++;
+                                //     $this->failedRows[] = ['row'=>$this->rowNo, 'name'=>$name ?: '—', 'meter'=>$meter ?: '—', 'reason'=>$reason ?: 'تعذر تحديد المشترك'];
+                                //     continue;
+                                // }
+
+                            
+
+                                // $meterIdx = $this->headerIndex($this->meterKeys());
+                                // $oldIdx   = $this->headerIndex($this->oldKeys());
+                                // $newIdx   = $this->headerIndex($this->newKeys());
+                                // if ($meterIdx !== null && ($oldIdx === $meterIdx || $newIdx === $meterIdx)) {
+                                //     $this->counters->skipped++;
+                                //     $this->failedRows[] = ['row'=>$this->rowNo, 'name'=>$name ?: '—', 'meter'=>$meter ?: '—', 'reason'=>'عمود القراءة يطابق عمود رقم العداد'];
+                                //     continue;
+                                // }
+
+                                // $oldReading = $this->toInt($old);
+                                // $newReading = ($new === '' || $new === null) ? null : $this->toInt($new);
+                                // if ($newReading !== null && $newReading < $oldReading) $newReading = $oldReading;
+
+                                // $unitPrice  = is_numeric($this->toFloatStr($unit))  ? (float) $this->toFloatStr($unit)  : 0.0;
+                                // $finalInput = is_numeric($this->toFloatStr($final)) ? (float) $this->toFloatStr($final) : null;
+
+                                // $consumption = max(0, (int) (($newReading ?? 0) - $oldReading));
+                                // $calcTotal   = round($consumption * $unitPrice, 2);
+                                // $finalAmount = round($finalInput === null ? $calcTotal : $finalInput, 2);
+
+                                // $issuedAt = $this->base->copy()->addSeconds(max(0, $this->rowNo - 2));
+                                // $genId = \App\Models\Subscriber::whereKey($subscriberId)->value('generator_id');
+
+                                // $invoice = \App\Models\Invoice::query()
+                                //     ->where('subscriber_id', $subscriberId)
+                                //     ->where('cycle_id', $this->cycleId)
+                                //     ->first();
+
+                                    
+
+                                //     $payload = [
+                                //                     'subscriber_name'  => $name,
+                                //                     'subscriber_phone'  => $phone,
+                                //                     'subscriber_meter_number'  =>  $meter,
+                                //                     'subscriber_use_fixed_price'  => $useFixedPrice==1 ?true : false,
+                                //                     'subscriber_id'    => $subscriberId,
+                                //                     'subscriber_status'  => $subscriberStatus,
+                                //                     'generator_id'     => $genId,
+                                //                     'collector_id'  => empty($collectorId) ? NULL : $collectorId, 
+                                //                     'cycle_id'         => $this->cycleId,
+                                //                     'issued_at'        => $issuedAt,
+                                //                     'old_reading'      => $oldReading,
+                                //                     'new_reading'      => $newReading,
+                                //                     'consumption'      => $consumption,
+                                //                     'unit_price_used'  => $unitPrice,
+                                //                     'calculated_total' => $calcTotal,
+                                //                     'final_amount'     => $finalAmount,
+                                            //   ];
+
+
+                                // if ($invoice) {
+                                //     $invoice->fill($payload)->save();
+                                //     $this->counters->updated++;
+                                // } else {
+                                //     \App\Models\Invoice::create($payload);
+                                //     $this->counters->created++;
+                                // }
                             }
+
                         }
 
                         public function chunkSize(): int { return 500; }
@@ -602,34 +828,128 @@ class ListInvoices extends ListRecords
                         }
 
                         private function nameKeys(): array  { return ['المشترك','اسم المشترك','name']; }
+                        private function collectorKeys(): array  { return ['الجابي','اسم الجابي','collector_id']; }
+                        private function phoneKeys(): array  { return ['الهاتف','رقم الهاتف','phone']; }
+                        private function useFixedPriceKeys(): array  { return ['سعر ثابت','use_fixed_price']; }
                         private function meterKeys(): array { return ['رقم العداد','رقم العد اد','meter','meter_number']; }
                         private function idKeys(): array    { return ['ID المشترك','id','subscriber_id','subscriber id']; }
                         private function oldKeys(): array   { return ['القراءة القديمة','قراءة القديمة','قراءة القد','old','old_reading','old reading']; }
                         private function newKeys(): array   { return ['القراءة الجديدة','قراءة الجديدة','الجديده','new','new_reading','new reading']; }
                         private function unitKeys(): array  { return ['سعر الكيلو','سعر الكِلو','سعر الكيلوواط','unit','unit_price','price_per_kwh']; }
                         private function finalKeys(): array { return ['المبلغ النهائي','المبلغ النهائى','final','final_amount']; }
+                        private function statusKeys(): array { return ['الحالة','حالة','حالة المشترك','status','subscriber_status','subscriber status']; }
                     };
-
+                     // end the class
                     try {
                         Excel::import($importer, $path);
-
+                        // array_slice($failedRows, 0, 20
                         // إشعار مُبسّط: فقط عدد المُنشأ + الذين لم يُضافوا مع أسمائهم
-                        $msg = "تم الاستيراد — أُنشئت: {$c->created}";
-                        if ($c->skipped) {
-                            $names = array_map(
-                                fn($f) => ($f['name'] ?? '—') . ' / عداد ' . ($f['meter'] ?? '—'),
-                                array_slice($failedRows, 0, 20)
-                            );
-                            $msg .= " • لم تُضَف: {$c->skipped}";
-                            if (!empty($names)) {
-                                $msg .= "\n" . implode("\n", $names) . (count($failedRows) > 20 ? "\n…" : '');
-                            }
-                        }
+                        // $msg = "created :{$c->created}, updated:{$c->updated}, skipped:{$c->skipped}, sub_created:{$c->sub_created}, ignored:{$c->ignored}";
+                    //   $msg = "فاتورة جديدة: {$c->created}\n"
+                    //         . "تخطي: {$c->skipped}\n"
+                    //         . "مستخدم جديد: {$c->sub_created}\n"
+                    //         . "تجاهل: {$c->ignored}\n\n";
 
-                        Notification::make()->title($msg)->success()->persistent()->send();
+                    //     $names = array_map(
+                    //         fn($f) => "• النوع: " . ($f['type'] ?? '-') . "\n"
+                    //                 . "  السطر: " . ($f['row'] ?? '-') . "\n"
+                    //                 . "  ID: " . ($f['code_id'] ?? '-') . "\n"
+                    //                 . "  الاسم: " . ($f['name'] ?? '-') . "\n",
+                    //         $failedRows
+                    //     );
+
+                    //     $msg .= implode("\n", $names);
+                    //     // . (count($failedRows) > 20 ? "\n…" : ''
+
+                    //     Notification::make()->title('استيراد الفواتير')->body($msg)->success()->persistent()->send();
+
+
+
+
+
+                            // 🟢 1. First notification — summary counters
+                            $msg = "فاتورة جديدة: {$c->created}\n"
+                                . "تخطي: {$c->skipped}\n"
+                                . "مستخدم جديد: {$c->sub_created}\n"
+                                . "تجاهل: {$c->ignored}";
+
+                            Notification::make()
+                                ->title('ملخص استيراد الفواتير')
+                                ->body($msg)
+                                ->success()
+                                ->persistent()
+                                ->send();
+
+
+                            // 🟡 2. Second notification — ignored rows
+                            $ignoredRows = array_filter($failedRows, fn($f) => ($f['type'] ?? '') === 'ignored');
+                            $ignoredMsg="";
+                            if (!empty($ignoredRows)) {
+                                $ignoredMsg = "الصفوف التي تم تجاهلها:\n\n" . implode(
+                                    "\n",
+                                    array_map(
+                                        fn($f) => "• السطر: " . ($f['row'] ?? '-') .
+                                                " / ID: " . ($f['code_id'] ?? '-') .
+                                                " / الاسم: " . ($f['name'] ?? '-'),
+                                        $ignoredRows
+                                    )
+                                );
+
+                                Notification::make()
+                                    ->title('تجاهل الفواتير')
+                                    ->body($ignoredMsg)
+                                    ->warning()
+                                    ->persistent()
+                                    ->send();
+                            }
+
+
+                            // 🔵 3. Third notification — skipped rows
+                            $skippedRows = array_filter($failedRows, fn($f) => ($f['type'] ?? '') === 'skipped');
+                             $skippedMsg="";
+                            if (!empty($skippedRows)) {
+                                $skippedMsg = "الصفوف التي تم تخطيها:\n\n" . implode(
+                                    "\n",
+                                    array_map(
+                                        fn($f) => "• السطر: " . ($f['row'] ?? '-') .
+                                                " / ID: " . ($f['code_id'] ?? '-') .
+                                                " / الاسم: " . ($f['name'] ?? '-'),
+                                        $skippedRows
+                                    )
+                                );
+
+                                Notification::make()
+                                    ->title('الفواتير المتخطاة')
+                                    ->body($skippedMsg)
+                                    ->danger()
+                                    ->persistent()
+                                    ->send();
+                            }
+
+
+
+
+
 
                         if ($user = auth()->user()) {
-                            Notification::make()->title('استيراد الفواتير')->body($msg)->success()->sendToDatabase($user);
+                           Notification::make()
+                                ->title('ملخص استيراد الفواتير')
+                                ->body($msg)
+                                ->success()->sendToDatabase($user);
+
+                                 Notification::make()
+                                    ->title('تجاهل الفواتير')
+                                    ->body($ignoredMsg)
+                                    ->warning()
+                                    ->sendToDatabase($user);
+
+                                          Notification::make()
+                                    ->title('الفواتير المتخطاة')
+                                    ->body($skippedMsg)
+                                    ->danger()
+                                    ->sendToDatabase($user);
+
+
                         }
 
                         $this->dispatch('refresh');

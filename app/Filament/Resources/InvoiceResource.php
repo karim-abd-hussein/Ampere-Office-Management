@@ -11,8 +11,10 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\SelectColumn;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\TextInputColumn;
+use Filament\Forms\Components\Toggle;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Actions\DeleteAction;
@@ -22,6 +24,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use App\Filament\Resources\InvoiceResource\Pages;
 use Filament\Tables\Columns\Summarizers\Sum;
+use Filament\Tables\Columns\ToggleColumn;
 use Illuminate\Support\Facades\DB;
 
 class InvoiceResource extends Resource
@@ -115,6 +118,14 @@ class InvoiceResource extends Resource
             Forms\Components\TextInput::make('calculated_total')->label('السعر الكلي المحسوب')->numeric()->required(),
             Forms\Components\TextInput::make('final_amount')->label('المبلغ النهائي المدفوع')->numeric()->required(),
             Forms\Components\DateTimePicker::make('issued_at')->label('تاريخ الإصدار')->required(),
+
+                   // ======== التسعير الثابت ========
+            Toggle::make('subscriber_use_fixed_price')
+                ->label('سعر الكيلو ثابت لهذة الفاتورة')
+                ->helperText('لو فعّلتها، الفاتورة تحسب بسعر الكيلو الثابت وتجاهل شرائح المولّدة.')
+                ->reactive()
+                // ->default(false),
+
         ]);
     }
 
@@ -129,32 +140,51 @@ class InvoiceResource extends Resource
                     ->width('6rem')
                     ->toggleable(isToggledHiddenByDefault: true),
 
-                TextColumn::make('subscriber.name')
+                TextInputColumn::make('subscriber_name')
                     ->label('المشترك')
                     ->searchable()
-                    ->width('10rem'),
+                    ->rules(['required', 'string', 'max:255'])
+                    ->width('10rem')
+                     ->updateStateUsing(function ($state, $record) {
+                            $record->subscriber_name = $state;
+                            $record->save();
+                        }),
 
-                TextColumn::make('subscriber_id')
+                TextColumn::make('subscriber_code_id')
                     ->label('ID المشترك')
                     ->sortable()
+                    ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->width('6رم'),
 
-                TextColumn::make('subscriber.box_number')
+                TextInputColumn::make('subscriber_box_number')
                     ->label('رقم العلبة')
                     ->sortable()
+                    ->rules(['required', 'string', 'max:255'])
                     ->toggleable(isToggledHiddenByDefault: true)
+                     ->updateStateUsing(function ($state, $record) {
+                            $record->subscriber_box_number = $state;
+                            $record->save();
+                        })
                     ->width('7rem'),
 
-                TextColumn::make('subscriber.meter_number')
+                TextInputColumn::make('subscriber_meter_number')
                     ->label('رقم العداد')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true)
+                    ->updateStateUsing(function ($state, $record) {
+                        $record->subscriber_meter_number = $state;
+                        $record->save();
+                    })
                     ->width('7rem'),
 
-                TextColumn::make('subscriber.phone')
+                TextInputColumn::make('subscriber_phone')
                     ->label('رقم الهاتف')
                     ->searchable()
+                      ->updateStateUsing(function ($state, $record) {
+                            $record->subscriber_phone = $state;
+                            $record->save();
+                        })
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('generator.name')
@@ -163,9 +193,18 @@ class InvoiceResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->width('8rem'),
 
+               SelectColumn::make('collector_id')
+                ->label('الجابي')
+                ->options(\App\Models\Collector::pluck('name', 'id')) // Adjust model name if different
+                ->searchable()
+                ->sortable()
+                ->toggleable(isToggledHiddenByDefault: true)
+                ->width('8rem'),
+
                 TextColumn::make('cycle.code')
                     ->label('الدورة')
                     ->toggleable()
+                    ->toggleable(isToggledHiddenByDefault: true)
                     ->width('8rem'),
 
                 TextColumn::make('old_reading')
@@ -185,13 +224,16 @@ class InvoiceResource extends Resource
                         'inputmode' => 'numeric',
                         'data-new-reading' => '1',
                         'data-old' => (string) (float) ($record->old_reading ?? 0),
+                        'data-new' => (string) (float) ($record->new_reading ?? 0),
 
                         // Enter = التالي (مع فحص القيمة)
                         'x-on:keydown.enter.prevent.stop' => '
                             const oldVal = parseFloat($el.dataset.old || "0");
+                            const newRVal = parseFloat($el.dataset.new || "0");
                             const newVal = parseFloat(($el.value || "0"));
                             if (!Number.isNaN(newVal) && newVal < oldVal) {
-                                alert("القراءة الجديدة أصغر من القراءة القديمة.");
+                                $el.value = newRVal >= oldVal ?newRVal :oldVal ;
+                                alert("القراءة الجديدة أصغر من القراءة القديمة. سوف يتم أرجاع القيمة "+$el.value);
                                 return;
                             }
                             const inputs = Array.from(document.querySelectorAll("input[data-new-reading=\"1\"]"));
@@ -213,9 +255,11 @@ class InvoiceResource extends Resource
                         // ↓ = التالي مع فحص القيمة
                         'x-on:keydown.arrow-down.prevent.stop' => '
                             const oldVal = parseFloat($el.dataset.old || "0");
+                             const newRVal = parseFloat($el.dataset.new || "0");
                             const newVal = parseFloat(($el.value || "0"));
                             if (!Number.isNaN(newVal) && newVal < oldVal) {
-                                alert("القراءة الجديدة أصغر من القراءة القديمة.");
+                                $el.value = newRVal >= oldVal ?newRVal :oldVal ;
+                                alert("القراءة الجديدة أصغر من القراءة القديمة. سوف يتم أرجاع القيمة "+$el.value);
                                 return;
                             }
                             const inputs = Array.from(document.querySelectorAll("input[data-new-reading=\"1\"]"));
@@ -231,9 +275,11 @@ class InvoiceResource extends Resource
                         // ↑ = السابق مع فحص القيمة
                         'x-on:keydown.arrow-up.prevent.stop' => '
                             const oldVal = parseFloat($el.dataset.old || "0");
+                             const newRVal = parseFloat($el.dataset.new || "0");
                             const newVal = parseFloat(($el.value || "0"));
                             if (!Number.isNaN(newVal) && newVal < oldVal) {
-                                alert("القراءة الجديدة أصغر من القراءة القديمة.");
+                              $el.value = newRVal >= oldVal ?newRVal :oldVal ;
+                                alert("القراءة الجديدة أصغر من القراءة القديمة. سوف يتم أرجاع القيمة "+$el.value);
                                 return;
                             }
                             const inputs = Array.from(document.querySelectorAll("input[data-new-reading=\"1\"]"));
@@ -259,24 +305,44 @@ class InvoiceResource extends Resource
                                     ->warning()
                                     ->persistent()
                                     ->send();
+
+                                  if ($user = auth()->user()) {
+                                    Notification::make()
+                                   ->title('القراءة الجديدة أصغر من القراءة القديمة')
+                                    ->body("القراءة الجديدة: {$newVal} | القراءة القديمة: {$old} ")
+                                    ->warning()
+                                    ->sendToDatabase($user);
+                                 }
+
                                 return; // لا نحفظ أي شيء
                             }
                         }
 
-                        $new  = $isEmpty ? null : (float) $state;
+                        $new  =  (float) $state;
                         $cons = max(0, (float)($new ?? 0) - $old);
 
-                        $record->loadMissing(
-                            'subscriber:id,generator_id',
+                        $record->load(
+                            'subscriber:*',//id,use_fixed_price,fixed_kwh_price,generator_id
                             'generator:id,price_per_kwh',
                             'generator.tariffs:id,generator_id,from_kwh,to_kwh,price_per_kwh'
                         );
 
                         $generator = $record->generator ?: $record->subscriber?->generator;
 
-                        $unit = $generator
+                         // Check if subscriber uses fixed price
+
+                        
+                        if($record->subscriber_use_fixed_price){
+
+                             $unit =$record->unit_price_used;
+                        }else {
+                             $unit = $generator
                             ? (float) $generator->priceForConsumption($cons)
                             : (float) ($record->unit_price_used ?? 0);
+                        }
+                           
+                          
+                           
 
                         $record->new_reading      = $new;
                         $record->consumption      = $cons;
@@ -311,6 +377,14 @@ class InvoiceResource extends Resource
                                     ->warning()
                                     ->persistent()
                                     ->send();
+
+                             if ($user = auth()->user()) {
+                                    Notification::make()
+                                    ->title('تنبيه: استهلاك صفر متكرر')
+                                    ->body("المشترك {$name} استهلاكه صفر مرتين متتاليتين ({$prevCode} ثم {$nowCode}).")
+                                    ->warning()
+                                    ->sendToDatabase($user);
+                                 }
                             }
                         }
                     }),
@@ -326,32 +400,64 @@ class InvoiceResource extends Resource
                             ->formatStateUsing(fn ($state) => number_format((float) $state, 0)),
                     ]),
 
-                TextColumn::make('unit_price_used')
-                    ->label('سعر الكيلو')
-                    ->sortable()
-                    ->width('7rem')
-                    ->html()
-                    ->formatStateUsing(function ($state, Invoice $record) {
-                        $curr = (float) $state;
+             ToggleColumn::make('subscriber_use_fixed_price')
+                    ->label('سعر ثابت')
+                    ->onColor('success')  // Color when enabled
+                    ->offColor('danger')  // Color when disabled
+                    ->onIcon('heroicon-o-check')
+                    ->offIcon('heroicon-o-x-mark')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->tooltip('تفعيل أو تعطيل السعر الثابت'),
 
-                        $record->loadMissing(
-                            'generator:id,price_per_kwh',
-                            'generator.tariffs:id,generator_id,from_kwh,to_kwh,price_per_kwh'
-                        );
-                        $base = $record->generator
-                            ? (float) $record->generator->priceForConsumption($record->consumption)
-                            : $curr;
+            TextInputColumn::make('unit_price_used')
+                ->rules(['numeric', 'min:0'])
+                ->label('سعر الكيلو')
+                ->sortable()
+                ->width('7rem')
+                ->disabled(fn () => !static::allowManage())
+                ->afterStateUpdated(function ($state, Invoice $record) {
+                    try {
+                        $unitPrice = (float) $state;
+                        
+                        // Update the record with calculations
+                        $record->update([
+                            'unit_price_used' => $unitPrice,
+                            'calculated_total' => round($record->consumption * $unitPrice, 2),
+                            'final_amount' => round($record->consumption * $unitPrice, 2),
+                        ]);
+                        
+                        // Optional: Show success notification
+                        Notification::make()
+                            ->title('تم تحديث السعر والحسابات بنجاح')
+                            ->success()
+                            ->send();
 
-                        $currFmt = number_format($curr, 2);
 
-                        if ($base > 0 && $curr < $base - 0.0001) {
-                            $baseFmt = number_format($base, 2);
-                            return '<div><div><strong>'.$currFmt.'</strong></div>'
-                                .'<div style="text-decoration:line-through;opacity:.65;font-size:.85em">'.$baseFmt.'</div></div>';
+                        if ($user = auth()->user()) {
+                        Notification::make()
+                        ->title('تم تحديث السعر والحسابات بنجاح')
+                        ->success()
+                        ->sendToDatabase($user);
                         }
+                            
+                    } catch (\Exception $e) {
+                        Notification::make()
+                            ->title('خطأ في تحديث السعر')
+                            ->body('حدث خطأ أثناء حفظ البيانات')
+                            ->danger()
+                            ->send();
 
-                        return $currFmt;
-                    }),
+
+                      if ($user = auth()->user()) {
+                        Notification::make()
+                        ->title('خطأ في تحديث السعر')
+                        ->body('حدث خطأ أثناء حفظ البيانات')
+                        ->danger()
+                        ->sendToDatabase($user);
+                        }
+                            
+                    }
+                }),
 
                 TextColumn::make('final_amount')
                     ->label('المبلغ النهائي')
@@ -361,7 +467,7 @@ class InvoiceResource extends Resource
                     ->formatStateUsing(function ($state, Invoice $record) {
                         $final = (float) ($record->final_amount ?? 0);
                         $calc  = (float) ($record->calculated_total ?? 0);
-                        $finalFmt = number_format($final, 2);
+                        $finalFmt = number_format($final);
 
                         if ($final < $calc - 0.0001) {
                             $calcFmt = number_format($calc, 2);
@@ -385,23 +491,50 @@ class InvoiceResource extends Resource
                     ->tooltip(fn ($record) => (string)($record->note ?? ''))
                     ->toggleable(isToggledHiddenByDefault: true),
 
-                BadgeColumn::make('subscriber.status')
-                    ->label('الحالة')
-                    ->width('7rem')
-                    ->colors([
-                        'success' => fn (?string $state): bool => $state === 'active',
-                        'warning' => fn (?string $state): bool => in_array($state, ['disconnected', 'changed_meter', 'changed_name'], true),
-                        'danger'  => fn (?string $state): bool => $state === 'cancelled',
-                    ])
-                    ->formatStateUsing(fn (?string $state) => match ($state) {
-                        'active'         => 'فعال',
-                        'disconnected'   => 'مفصول',
-                        'cancelled'      => 'ملغى',
-                        'changed_meter'  => 'تم تغيير العداد',
-                        'changed_name'   => 'تم تغيير الاسم',
-                        default          => '—',
-                    }),
+                SelectColumn::make('subscriber_status')
+                ->label('الحالة')
+                ->width('7rem')
+                ->options([
+                    'active'        => 'فعال',
+                    'disconnected'  => 'مفصول',
+                    'cancelled'     => 'ملغى',
+                    'changed_meter' => 'تم تغيير العداد',
+                    'changed_name'  => 'تم تغيير الاسم',
+                ])
+                ->searchable()
+                ->toggleable(isToggledHiddenByDefault: true)
+                ->sortable()
+                ->afterStateUpdated(function ($record, $state) {
+                    // Update the invoice field itself
+                    $record->subscriber_status = $state;
+                    $record->save();
+
+                    // Update the actual subscriber model
+                    // if ($record->subscriber) {
+                    //     $record->subscriber->update(['status' => $state]);
+                    // }
+                }),
+
+
+                    // old
+                // BadgeColumn::make('subscriber.status')
+                //     ->label('الحالة')
+                //     ->width('7rem')
+                //     ->colors([
+                //         'success' => fn (?string $state): bool => $state === 'active',
+                //         'warning' => fn (?string $state): bool => in_array($state, ['disconnected', 'changed_meter', 'changed_name'], true),
+                //         'danger'  => fn (?string $state): bool => $state === 'cancelled',
+                //     ])
+                //     ->formatStateUsing(fn (?string $state) => match ($state) {
+                //         'active'         => 'فعال',
+                //         'disconnected'   => 'مفصول',
+                //         'cancelled'      => 'ملغى',
+                //         'changed_meter'  => 'تم تغيير العداد',
+                //         'changed_name'   => 'تم تغيير الاسم',
+                //         default          => '—',
+                //     }),
             ])
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['cycle.generator']))
             ->filters([
                 SelectFilter::make('collector_id')
                     ->label('حسب الجابي')
@@ -410,9 +543,19 @@ class InvoiceResource extends Resource
                     ->preload()
                     ->searchable(),
 
+                //  // Generator filter
+                 SelectFilter::make('generator_id')
+                        ->label('حسب المولّدة')
+                        ->relationship('generator', 'name')
+                        ->placeholder('الكل')
+                        ->preload()
+                        ->searchable(),
+
+
                 SelectFilter::make('cycle_id')
                     ->label('حسب الدورة')
                     ->options(fn () => Cycle::query()
+                        ->where('is_archived', 0)
                         ->orderByDesc('start_date')
                         ->get()
                         ->mapWithKeys(fn ($c) => [$c->id => $c->code])
@@ -422,12 +565,6 @@ class InvoiceResource extends Resource
                     ->preload()
                     ->searchable(),
 
-                SelectFilter::make('generator_id')
-                    ->label('حسب المولّدة')
-                    ->relationship('generator', 'name')
-                    ->placeholder('الكل')
-                    ->preload()
-                    ->searchable(),
 
                 SelectFilter::make('area_id')
                     ->label('حسب المنطقة')
