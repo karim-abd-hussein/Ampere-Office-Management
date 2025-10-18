@@ -25,13 +25,13 @@ REM net start mysql >nul 2>&1
 
 REM Wait until MySQL is actually running
 echo Waiting for MySQL to start...
-:check_mysql
-sc query mysql | find "RUNNING" >nul
-if errorlevel 1 (
-    echo MySQL not ready yet... waiting 3 seconds.
-    timeout /t 3 >nul
+REM :check_mysql
+REM sc query mysql | find "RUNNING" >nul
+REM if errorlevel 1 (
+    echo MySQL not ready yet... waiting 5 seconds.
+    timeout /t 5 >nul
    REM goto check_mysql
-)
+REM )
 echo MySQL service is now running!
 echo.
 
@@ -44,19 +44,27 @@ git pull origin %BRANCH%
 
 REM === Install Composer dependencies ===
 echo Installing Composer dependencies...
-composer install
+call composer install
 
 REM === Run database migrations ===
 echo Running migrations...
-php artisan migrate --force
+call php artisan migrate --force
+echo Migrations completed!
 
 REM === Clear and cache Laravel config/views/routes ===
-php artisan optimize:clear
-php artisan optimize
+echo Clearing and caching config/views/routes...
+call php artisan optimize:clear
+call php artisan optimize
+echo Config/views/routes cleared and optimized!
+
+REM === Run Filament Upgrade ===
+REM echo Running Filament upgrade...
+REM call php artisan filament:upgrade
+REM echo Filament upgrade completed!
 
 REM === Start Laravel development server ===
 echo Starting Laravel server...
-start "" php artisan serve
+start "" cmd /c "php artisan serve --port=8000"
 
 REM === Wait a few seconds to ensure the server starts ===
 timeout /t 5 >nul
