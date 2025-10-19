@@ -31,6 +31,7 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithCalculatedFormulas;
 
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
@@ -301,7 +302,7 @@ class ListInvoices extends ListRecords
                                     'cycle:id,start_date,generator_id', // ✅ Include generator_id
                                     'cycle.generator:id,name', // ✅ Load generator relationship
                                     'collector:id,name'])
-                                    ->select(['subscriber_id','subscriber_name','subscriber_phone','subscriber_box_number','subscriber_meter_number','subscriber_code_id','subscriber_status','cycle_id','old_reading','new_reading','consumption','unit_price_used','final_amount','issued_at','collector_id'])
+                                    ->select(['note','subscriber_id','subscriber_name','subscriber_phone','subscriber_box_number','subscriber_meter_number','subscriber_code_id','subscriber_status','cycle_id','old_reading','new_reading','consumption','unit_price_used','final_amount','issued_at','collector_id'])
                                     ->whereIn('cycle_id', $this->cycleIds)
                                     ->orderBy('cycle_id','desc')
                                     ->orderBy('issued_at','asc')
@@ -314,7 +315,7 @@ class ListInvoices extends ListRecords
                                     };
                                     $cycleCode = $i->cycle?->code ?? '';
 
-                                    dd($i->old_reading);
+                                    // dd($i->old_reading);
                                     return [
                                         $i->subscriber_name ?? '',
                                         $i->subscriber_phone ?? '',
@@ -322,13 +323,14 @@ class ListInvoices extends ListRecords
                                         $i->subscriber_meter_number ?? '',
                                         $i->subscriber_code_id ?? '',
                                         $cycleCode,
-                                        $i->old_reading??0,
-                                        is_null($i->new_reading) ? 0 :$i->new_reading,
-                                        $i->consumption??0,
+                                        empty($i->old_reading)?'0':$i->old_reading,
+                                        empty($i->new_reading)?'0':$i->new_reading,
+                                        empty($i->consumption)?'0':$i->consumption,
                                         $i->unit_price_used ?? 0,
                                         $i->final_amount ?? 0,
                                         $statusAr,
-                                        $i->collector?->name ?? '—', // ✅ ADDED COLLECTOR NAME
+                                        $i->collector?->name ?? '—',
+                                        $i->note ?? '—',
                                     ];
                                 });
                             }
@@ -337,16 +339,16 @@ class ListInvoices extends ListRecords
                                 return [
                                     'المشترك','رقم الهاتف','رقم العلبة','رقم العداد','ID المشترك',
                                     'الدورة','القراءة القديمة','القراءة الجديدة','الاستهلاك',
-                                    'سعر الكيلو','المبلغ النهائي','الحالة','الجابي'
+                                    'سعر الكيلو','المبلغ النهائي','الحالة','الجابي','الملاحظات'
                                 ];
                             }
                             public function styles(Worksheet $sheet): array
                             {
-                                $sheet->getStyle('A1:M1')->getFont()->setBold(true);
-                                $sheet->getStyle('A1:M1')->getAlignment()
+                                $sheet->getStyle('A1:N1')->getFont()->setBold(true);
+                                $sheet->getStyle('A1:N1')->getAlignment()
                                     ->setHorizontal(Alignment::HORIZONTAL_CENTER)
                                     ->setVertical(Alignment::VERTICAL_CENTER);
-                                $sheet->getStyle('A1:M1')->getFill()->setFillType(Fill::FILL_NONE);
+                                $sheet->getStyle('A1:N1')->getFill()->setFillType(Fill::FILL_NONE);
                                 return [];
                             }
                             public function registerEvents(): array
@@ -357,11 +359,11 @@ class ListInvoices extends ListRecords
                                         $ws->setRightToLeft(true);
                                         $last = (int) $ws->getHighestRow();
                                         if ($last >= 2) {
-                                            $ws->getStyle("A2:M{$last}")->getAlignment()
+                                            $ws->getStyle("A2:N{$last}")->getAlignment()
                                                 ->setHorizontal(Alignment::HORIZONTAL_CENTER)
                                                 ->setVertical(Alignment::VERTICAL_CENTER);
                                         }
-                                        $ws->getStyle("A1:M{$last}")->applyFromArray([
+                                        $ws->getStyle("A1:N{$last}")->applyFromArray([
                                             'borders' => [
                                                 'allBorders' => [
                                                     'borderStyle' => Border::BORDER_THIN,
@@ -370,18 +372,18 @@ class ListInvoices extends ListRecords
                                             ],
                                         ]);
                                         for ($r = 2; $r <= $last; $r++) {
-                                            $status = (string) $ws->getCell("M{$r}")->getValue();
+                                            $status = (string) $ws->getCell("N{$r}")->getValue();
                                             if (in_array($status, ['مفصول','ملغى'], true)) {
-                                                $ws->getStyle("A{$r}:M{$r}")
+                                                $ws->getStyle("A{$r}:N{$r}")
                                                     ->getFill()->setFillType(Fill::FILL_SOLID)
                                                     ->getStartColor()->setARGB('FFFFFF00');
                                             } else {
                                                 if ($r % 2 === 0) {
-                                                    $ws->getStyle("A{$r}:M{$r}")
+                                                    $ws->getStyle("A{$r}:N{$r}")
                                                         ->getFill()->setFillType(Fill::FILL_SOLID)
                                                         ->getStartColor()->setARGB('FFF2F2F2');
                                                 } else {
-                                                    $ws->getStyle("A{$r}:M{$r}")
+                                                    $ws->getStyle("A{$r}:N{$r}")
                                                         ->getFill()->setFillType(Fill::FILL_NONE);
                                                 }
                                             }
@@ -442,7 +444,7 @@ class ListInvoices extends ListRecords
                     $failedRows = [];
 
                     // start the class
-                    $importer = new class($cycleId, $base, $c, $failedRows,$importRef) implements ToCollection, WithChunkReading {
+                    $importer = new class($cycleId, $base, $c, $failedRows,$importRef) implements ToCollection, WithChunkReading,WithCalculatedFormulas {
                         private ?array $headerMap = null;
                         private int $rowNo = 1;
 
@@ -517,7 +519,7 @@ class ListInvoices extends ListRecords
                                 $row = $this->normalizeRow($rowItem);
 
                                 $name  = $this->cell($row, $this->headerMap, $this->nameKeys());
-                                // $collectorId  = $this->cell($row, $this->headerMap, $this->collectorKeys());
+                                $collectorId  = $this->cell($row, $this->headerMap, $this->collectorKeys());
                                 $phone  = $this->cell($row, $this->headerMap, $this->phoneKeys());
                                 $useFixedPrice  = $this->cell($row, $this->headerMap, $this->useFixedPriceKeys());
                                 $fixedPriceTxt = $this->cell($row, $this->headerMap, ['سعر الكيلو', 'fixed_kwh_price', 'kwh_price', 'price_per_kwh']);
@@ -529,6 +531,7 @@ class ListInvoices extends ListRecords
                                 $new   = $this->cell($row, $this->headerMap, $this->newKeys(), disallowMeter:true);
                                 $unit  = $this->cell($row, $this->headerMap, $this->unitKeys());
                                 $final = $this->cell($row, $this->headerMap, $this->finalKeys());
+                                // dd( $final);
                                 $subscriberStatus = $this->cell($row, $this->headerMap, $this->statusKeys());
                                 //dd($subscriberStatus);
                                 $issuedAt = $this->base->copy()->addSeconds(max(0, $this->rowNo - 2));
@@ -571,7 +574,7 @@ class ListInvoices extends ListRecords
                                                     'subscriber_id'    => $sub->id,
                                                     'subscriber_status'  => empty($subscriberStatus)?'active':$subscriberStatus,
                                                     'generator_id'     => $sub->generator_id,
-                                                    'collector_id'  => $sub->collector_id, 
+                                                    'collector_id'  =>  $collectorId, 
                                                     'cycle_id'         => $this->cycleId,
                                                     'issued_at'        => $issuedAt,
                                                     'old_reading'      => $oldReading,

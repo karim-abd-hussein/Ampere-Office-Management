@@ -464,7 +464,7 @@ class InvoiceResource extends Resource
                     ->sortable()
                     ->width('8rem')
                     // ->html()
-                    // ->formatStateUsing(function ($state, Invoice $record) {
+                    ->formatStateUsing(function ($state, Invoice $record) {
                     //     $final = (float) ($record->final_amount ?? 0);
                     //     $calc  = (float) ($record->calculated_total ?? 0);
                     //     $finalFmt = number_format($final);
@@ -475,8 +475,8 @@ class InvoiceResource extends Resource
                     //             .'<div style="text-decoration:line-through;opacity:.65;font-size:.85em">'.$calcFmt.'</div></div>';
                     //     }
 
-                    //     return $finalFmt;
-                    // })
+                        return  number_format($state);
+                    })
                     ->summarize([
                         Sum::make()
                             ->label('')
