@@ -140,15 +140,11 @@ class InvoiceResource extends Resource
                     ->width('6rem')
                     ->toggleable(isToggledHiddenByDefault: true),
 
-                TextInputColumn::make('subscriber_name')
+                TextColumn::make('subscriber_name')
                     ->label('المشترك')
                     ->searchable()
-                    ->rules(['required', 'string', 'max:255'])
-                    ->width('10rem')
-                     ->updateStateUsing(function ($state, $record) {
-                            $record->subscriber_name = $state;
-                            $record->save();
-                        }),
+                    ->sortable()
+                    ->width('10rem'),
 
                 TextColumn::make('subscriber_code_id')
                     ->label('ID المشترك')
