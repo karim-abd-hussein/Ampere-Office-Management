@@ -164,14 +164,15 @@ class InvoiceResource extends Resource
                         })
                     ->width('7rem'),
 
-                TextInputColumn::make('subscriber_meter_number')
+                TextColumn::make('subscriber_meter_number')
                     ->label('رقم العداد')
                     ->sortable()
+                    ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true)
-                    ->updateStateUsing(function ($state, $record) {
-                        $record->subscriber_meter_number = $state;
-                        $record->save();
-                    })
+                    // ->updateStateUsing(function ($state, $record) {
+                    //     $record->subscriber_meter_number = $state;
+                    //     $record->save();
+                    // })
                     ->width('7rem'),
 
                 TextInputColumn::make('subscriber_phone')
@@ -361,9 +362,9 @@ class InvoiceResource extends Resource
                                 ->select('invoices.*')
                                 ->first();
 
-                            if ($prev && (int) $prev->consumption === 0) {
+                            if ($prev && (int) $prev->consumption === 0 && $record->subscriber_status=="active") {
                                 $prev->loadMissing('cycle:id,start_date');
-                                $name     = $record->subscriber?->name ?? '—';
+                                $name     = $record->subscriber_name ?? '—';
                                 $prevCode = $prev->cycle?->code ?? '';
                                 $nowCode  = $record->cycle?->code ?? '';
 

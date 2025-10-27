@@ -295,45 +295,72 @@ class ListInvoices extends ListRecords
                     return Excel::download(
                         new class($ids) implements FromCollection, WithHeadings, ShouldAutoSize, WithStyles, WithEvents {
                             public function __construct(private array $cycleIds) {}
-                            public function collection()
-                            {
-                                $q = \App\Models\Invoice::query()
-                                    ->with(['subscriber:id,name,phone,status,box_number,meter_number',
-                                    'cycle:id,start_date,generator_id', // ✅ Include generator_id
-                                    'cycle.generator:id,name', // ✅ Load generator relationship
-                                    'collector:id,name'])
-                                    ->select(['note','subscriber_id','subscriber_name','subscriber_phone','subscriber_box_number','subscriber_meter_number','subscriber_code_id','subscriber_status','cycle_id','old_reading','new_reading','consumption','unit_price_used','final_amount','issued_at','collector_id'])
-                                    ->whereIn('cycle_id', $this->cycleIds)
-                                    ->orderBy('cycle_id','desc')
-                                    ->orderBy('issued_at','asc')
-                                    ->orderBy('id','asc');
+                                public function collection()
+                                {
+                                    $invoices = \App\Models\Invoice::query()
+                                        ->with([
+                                            'subscriber:id,name,phone,status,box_number,meter_number',
+                                            'cycle.generator:id,name',
+                                            'collector:id,name',
+                                        ])
+                                        ->select([
+                                            'note','subscriber_id','subscriber_name','subscriber_phone',
+                                            'subscriber_box_number','subscriber_meter_number','subscriber_code_id',
+                                            'subscriber_status','cycle_id','old_reading','new_reading',
+                                            'consumption','unit_price_used','final_amount','issued_at','collector_id'
+                                        ])
+                                        ->whereIn('cycle_id', $this->cycleIds)
+                                        ->orderBy('cycle_id', 'desc')
+                                        ->orderBy('issued_at', 'asc')
+                                        ->orderBy('id', 'asc')
+                                        ->get();
 
-                                return $q->get()->map(function (\App\Models\Invoice $i) {
-                                    $statusAr = match ($i->subscriber_status ?? null) {
+                                    $rows = [];
+                                    $lastCycle = null;
 
-                                         'changed_meter' => 'تم تغيير العداد','changed_name'  => 'تم تغيير الاسم','active'=>'فعال','disconnected'=>'مفصول','cancelled'=>'ملغى', default=>'—',
-                                    };
-                                    $cycleCode = $i->cycle?->code ?? '';
+                                    foreach ($invoices as $i) {
+                                        $cycleCode = $i->cycle?->code ?? '';
 
-                                    // dd($i->old_reading);
-                                    return [
-                                        $i->subscriber_name ?? '',
-                                        $i->subscriber_phone ?? '',
-                                        $i->subscriber_box_number?? '',
-                                        $i->subscriber_meter_number ?? '',
-                                        $i->subscriber_code_id ?? '',
-                                        $cycleCode,
-                                        empty($i->old_reading)?'0':$i->old_reading,
-                                        empty($i->new_reading)?'0':$i->new_reading,
-                                        empty($i->consumption)?'0':$i->consumption,
-                                        $i->unit_price_used ?? 0,
-                                        $i->final_amount ?? 0,
-                                        $statusAr,
-                                        $i->collector?->name ?? '—',
-                                        $i->note ?? '—',
-                                    ];
-                                });
-                            }
+                                        // 🟫 Insert a dark separator row when cycle changes
+                                        if ($lastCycle !== null && $lastCycle !== $i->cycle_id) {
+                                            $rows[] = ['__SEPARATOR__']; // mark row for styling later
+                                        }
+
+                                        $statusAr = match ($i->subscriber_status ?? null) {
+                                            'changed_meter' => 'تم تغيير العداد',
+                                            'changed_name'  => 'تم تغيير الاسم',
+                                            'active'        => 'فعال',
+                                            'disconnected'  => 'مفصول',
+                                            'cancelled'     => 'ملغى',
+                                            default         => '—',
+                                        };
+
+                                        $rows[] = [
+                                            $i->subscriber_name ?? '',
+                                            $i->subscriber_phone ?? '',
+                                            $i->subscriber_box_number ?? '',
+                                            $i->subscriber_meter_number ?? '',
+                                            $i->subscriber_code_id ?? '',
+                                            $cycleCode,
+                                            empty($i->old_reading) ? '0' : $i->old_reading,
+                                            empty($i->new_reading) ? '0' : $i->new_reading,
+                                            empty($i->consumption) ? '0' : $i->consumption,
+                                            $i->unit_price_used ?? 0,
+                                            $i->final_amount ?? 0,
+                                            $statusAr,
+                                            $i->collector?->name ?? '—',
+                                            $i->note ?? '—',
+                                        ];
+
+                                        $lastCycle = $i->cycle_id;
+                                    }
+
+                                    return collect($rows);
+                                }
+
+                             
+
+
                             public function headings(): array
                             {
                                 return [
@@ -351,40 +378,54 @@ class ListInvoices extends ListRecords
                                 $sheet->getStyle('A1:N1')->getFill()->setFillType(Fill::FILL_NONE);
                                 return [];
                             }
-                            public function registerEvents(): array
-                            {
+                               public function registerEvents(): array
+                                {
                                 return [
                                     \Maatwebsite\Excel\Events\AfterSheet::class => function ($event) {
-                                        $ws   = $event->sheet->getDelegate();
+                                        $ws = $event->sheet->getDelegate();
                                         $ws->setRightToLeft(true);
                                         $last = (int) $ws->getHighestRow();
+
+                                        // Center and border style for all cells
                                         if ($last >= 2) {
                                             $ws->getStyle("A2:N{$last}")->getAlignment()
-                                                ->setHorizontal(Alignment::HORIZONTAL_CENTER)
-                                                ->setVertical(Alignment::VERTICAL_CENTER);
-                                        }
-                                        $ws->getStyle("A1:N{$last}")->applyFromArray([
-                                            'borders' => [
-                                                'allBorders' => [
-                                                    'borderStyle' => Border::BORDER_THIN,
-                                                    'color'       => ['argb' => 'FFBFBFBF'],
+                                                ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)
+                                                ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+
+                                            $ws->getStyle("A1:N{$last}")->applyFromArray([
+                                                'borders' => [
+                                                    'allBorders' => [
+                                                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                                                        'color'       => ['argb' => 'FFBFBFBF'],
+                                                    ],
                                                 ],
-                                            ],
-                                        ]);
+                                            ]);
+                                        }
+
+                                        // 🎨 Highlight and darken separator rows
                                         for ($r = 2; $r <= $last; $r++) {
-                                            $status = (string) $ws->getCell("N{$r}")->getValue();
-                                            if (in_array($status, ['مفصول','ملغى'], true)) {
+                                            $firstCell = (string) $ws->getCell("A{$r}")->getValue();
+
+                                            if ($firstCell === '__SEPARATOR__') {
+                                                // Fill row with dark gray and clear text
                                                 $ws->getStyle("A{$r}:N{$r}")
-                                                    ->getFill()->setFillType(Fill::FILL_SOLID)
-                                                    ->getStartColor()->setARGB('FFFFFF00');
+                                                    ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                                                    ->getStartColor()->setARGB('FF444444');
+                                                $ws->getStyle("A{$r}:N{$r}")->getFont()->getColor()->setARGB('FFFFFFFF');
+                                                $ws->getRowDimension($r)->setRowHeight(8);
+                                                // Clear value text to make it visually a separator
+                                                $ws->fromArray(array_fill(0, 14, ''), null, "A{$r}");
                                             } else {
-                                                if ($r % 2 === 0) {
+                                                // Alternate row color
+                                                $status = (string) $ws->getCell("N{$r}")->getValue();
+                                                if (in_array($status, ['مفصول','ملغى'], true)) {
                                                     $ws->getStyle("A{$r}:N{$r}")
-                                                        ->getFill()->setFillType(Fill::FILL_SOLID)
+                                                        ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                                                        ->getStartColor()->setARGB('FFFFFF00');
+                                                } elseif ($r % 2 === 0) {
+                                                    $ws->getStyle("A{$r}:N{$r}")
+                                                        ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
                                                         ->getStartColor()->setARGB('FFF2F2F2');
-                                                } else {
-                                                    $ws->getStyle("A{$r}:N{$r}")
-                                                        ->getFill()->setFillType(Fill::FILL_NONE);
                                                 }
                                             }
                                         }
