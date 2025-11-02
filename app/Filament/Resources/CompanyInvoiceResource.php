@@ -85,7 +85,7 @@ class CompanyInvoiceResource extends Resource
     {
         return $table
             ->modifyQueryUsing(function (Builder $query) {
-                $query->with(['company:id,name,phone,status', 'cycle:id,start_date']);
+                $query->with(['company:id,name,phone,status', 'cycle:id,start_date,generator_id']);
             })
             ->columns([
                 TextColumn::make('company.name')
@@ -183,6 +183,23 @@ class CompanyInvoiceResource extends Resource
                     ->placeholder('اختر دورة')
                     ->preload()
                     ->searchable(),
+
+                   // Generator filter
+                SelectFilter::make('generator_id')
+                    ->label('حسب المولّدة')
+                    ->options(fn () => \App\Models\Generator::pluck('name', 'id')->toArray())
+                    ->placeholder('الكل')
+                    ->preload()
+                    ->searchable()
+                    ->query(function (Builder $query, array $data) {
+                        $value = $data['value'] ?? null;
+
+                        if (!$value) return $query;
+
+                        // Filter invoices whose cycle has this generator_id
+                        return $query->whereHas('cycle', fn ($q) => $q->where('generator_id', $value));
+                    }),
+
 
                 SelectFilter::make('status')
                     ->label('حالة الشركة')

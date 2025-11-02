@@ -38,8 +38,10 @@ class CompanyResource extends Resource
 
     public static function allowView(): bool
     {
-        $u = auth()->user();
-        return $u && (static::isAdmin() || $u->can('عرض الشركات'));
+        // $u = auth()->user();
+        // return $u && (static::isAdmin() || $u->can('عرض الشركات'));
+
+        return false;
     }
 
     public static function allowCreate(): bool
@@ -82,6 +84,13 @@ class CompanyResource extends Resource
                         ->label('رقم الهاتف')
                         ->tel()
                         ->maxLength(255),
+
+                    Forms\Components\Select::make('generator_id')
+                            ->label('المولدة')
+                            ->relationship('generator', 'name')
+                            ->searchable()
+                            ->required(),
+
 
                     Forms\Components\TextInput::make('ampere')
                         ->label('الأمبير')

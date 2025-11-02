@@ -118,17 +118,17 @@ class SubscriberResource extends Resource
                 ->searchable()
                 ->required(),
 
-            Select::make('status')
-                ->label('الحالة')
-                ->options([
-                    'active'         => 'فعال',
-                    'disconnected'   => 'مفصول',
-                    'cancelled'      => 'ملغى',
-                    'changed_meter'  => 'تم تغيير العداد',
-                    'changed_name'   => 'تم تغيير الاسم',
-                ])
-                ->default('active')
-                ->required(),
+            // Select::make('status')
+            //     ->label('الحالة')
+            //     ->options([
+            //         'active'         => 'فعال',
+            //         'disconnected'   => 'مفصول',
+            //         'cancelled'      => 'ملغى',
+            //         'changed_meter'  => 'تم تغيير العداد',
+            //         'changed_name'   => 'تم تغيير الاسم',
+            //     ])
+            //     ->default('active')
+            //     ->required(),
 
             DatePicker::make('subscription_date')
                 ->label('تاريخ الاشتراك')
@@ -169,22 +169,22 @@ class SubscriberResource extends Resource
                 TextColumn::make('meter_number')->label('رقم العداد')->sortable()->searchable(),
                 TextColumn::make('box_number')->label('رقم العلبة')->sortable()->searchable(),
                 TextColumn::make('generator.name')->label('المولدة')->sortable()->searchable(),
-                BadgeColumn::make('status')
-                    ->label('الحالة')
-                    ->formatStateUsing(fn (?string $state) => match ($state) {
-                        'active'         => 'فعال',
-                        'disconnected'   => 'مفصول',
-                        'cancelled'      => 'ملغى',
-                        'changed_meter'  => 'تم تغيير العداد',
-                        'changed_name'   => 'تم تغيير الاسم',
-                        default          => '—',
-                    })
-                    ->colors([
-                        'success' => fn ($state) => $state === 'active',
-                        'warning' => fn ($state) => $state === 'disconnected',
-                        'danger'  => fn ($state) => $state === 'cancelled',
-                        'info'    => fn ($state) => in_array($state, ['changed_meter','changed_name'], true),
-                    ]),
+                // BadgeColumn::make('status')
+                //     ->label('الحالة')
+                //     ->formatStateUsing(fn (?string $state) => match ($state) {
+                //         'active'         => 'فعال',
+                //         'disconnected'   => 'مفصول',
+                //         'cancelled'      => 'ملغى',
+                //         'changed_meter'  => 'تم تغيير العداد',
+                //         'changed_name'   => 'تم تغيير الاسم',
+                //         default          => '—',
+                //     })
+                //     ->colors([
+                //         'success' => fn ($state) => $state === 'active',
+                //         'warning' => fn ($state) => $state === 'disconnected',
+                //         'danger'  => fn ($state) => $state === 'cancelled',
+                //         'info'    => fn ($state) => in_array($state, ['changed_meter','changed_name'], true),
+                //     ]),
 
                 // نوع التسعير
                 BadgeColumn::make('use_fixed_price')
@@ -223,22 +223,22 @@ class SubscriberResource extends Resource
                         return $query->whereIn('generator_id', $vals);
                     }),
 
-                SelectFilter::make('status')
-                    ->label('حسب الحالة')
-                    ->options([
-                        'active'        => 'فعال',
-                        'disconnected'  => 'مفصول',
-                        'cancelled'     => 'ملغى',
-                        'changed_meter' => 'تم تغيير العداد',
-                        'changed_name'  => 'تم تغيير الاسم',
-                    ])
-                    ->multiple()->placeholder('الكل')
-                    ->query(function (Builder $query, array $data) {
-                        $vals = $data['values'] ?? (isset($data['value']) ? [$data['value']] : []);
-                        $vals = array_values(array_filter((array) $vals));
-                        if (empty($vals)) return $query;
-                        return $query->whereIn('status', $vals);
-                    }),
+                // SelectFilter::make('status')
+                //     ->label('حسب الحالة')
+                //     ->options([
+                //         'active'        => 'فعال',
+                //         'disconnected'  => 'مفصول',
+                //         'cancelled'     => 'ملغى',
+                //         'changed_meter' => 'تم تغيير العداد',
+                //         'changed_name'  => 'تم تغيير الاسم',
+                //     ])
+                //     ->multiple()->placeholder('الكل')
+                //     ->query(function (Builder $query, array $data) {
+                //         $vals = $data['values'] ?? (isset($data['value']) ? [$data['value']] : []);
+                //         $vals = array_values(array_filter((array) $vals));
+                //         if (empty($vals)) return $query;
+                //         return $query->whereIn('status', $vals);
+                //     }),
 
                 // فلتر تاريخ الاشتراك
                 Filter::make('subscription_date')

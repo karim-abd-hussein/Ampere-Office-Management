@@ -41,18 +41,26 @@ class ListCompanyInvoices extends ListRecords
                 ->visible(fn () => CompanyInvoiceResource::allowAddCompany())
                 ->form([
                     TextInput::make('name')->label('اسم الشركة')->required(),
+                    Select::make('generator_id')->label('المولدة')
+                        ->options(fn () => \App\Models\Generator::query()->orderBy('name')->pluck('name', 'id')->all())
+                        ->searchable()->required(),
+
                     TextInput::make('phone')->label('رقم الهاتف')->tel(),
-                    TextInput::make('ampere')->label('الأمبير')->numeric()->step('0.01')->minValue(0)->default(0),
-                    TextInput::make('price_per_amp')->label('سعر الأمبير')->numeric()->step('0.01')->minValue(0)->default(0),
-                    TextInput::make('fixed_amount')->label('المبلغ الثابت')->numeric()->step('0.01')->minValue(0)->default(0),
+                    TextInput::make('ampere')->label('الأمبير')->numeric()->minValue(0)->default(0),
+                    TextInput::make('price_per_amp')->label('سعر الأمبير')->numeric()->minValue(0)->default(0),
+                    TextInput::make('fixed_amount')->label('المبلغ الثابت')->numeric()->minValue(0)->default(0),
                     Select::make('status')->label('الحالة')->default('active')->required()
                         ->options(['active' => 'فعال', 'disconnected' => 'مفصول', 'cancelled' => 'ملغى']),
                     Textarea::make('notes')->label('ملاحظات')->rows(3),
                 ])
                 ->action(function (array $data) {
                     try {
+
+
+                        $company_name=$data['name'];
                         DB::transaction(fn () => Company::create([
                             'name'          => $data['name'],
+                            'generator_id'      => $data['generator_id'],
                             'phone'         => $data['phone'] ?? null,
                             'ampere'        => (float) ($data['ampere'] ?? 0),
                             'price_per_amp' => (float) ($data['price_per_amp'] ?? 0),
@@ -61,7 +69,13 @@ class ListCompanyInvoices extends ListRecords
                             'notes'         => $data['notes'] ?? null,
                         ]));
 
-                        Notification::make()->title('تمت إضافة الشركة')->success()->send();
+                        Notification::make()->title("تمت إضافة الشركة {$company_name}")->success()->send();
+
+                       if ($user = auth()->user()) {
+                        Notification::make()->title("تمت إضافة الشركة {$company_name}")->success()->sendToDatabase($user);
+                        }
+
+
                         $this->dispatch('refresh');
                     } catch (Throwable $e) {
                         report($e);
@@ -97,7 +111,14 @@ class ListCompanyInvoices extends ListRecords
                         $created = 0;
 
                         DB::transaction(function () use ($cycleId, &$created) {
-                            Company::query()->orderBy('id')->chunkById(500, function ($companies) use ($cycleId, &$created) {
+
+
+                             $cycle = Cycle::find($cycleId);
+
+                            Company::query()
+                            ->where('generator_id', $cycle->generator_id)
+                            ->orderBy('id')
+                            ->chunkById(500, function ($companies) use ($cycleId, &$created) {
                                 foreach ($companies as $c) {
                                     $exists = CompanyInvoice::query()
                                         ->where('company_id', $c->id)
@@ -106,13 +127,18 @@ class ListCompanyInvoices extends ListRecords
 
                                     if ($exists) continue;
 
+
+                              $lastInvoice = CompanyInvoice::query()
+                                            ->where('company_id', $c->id)
+                                            ->orderByDesc('issued_at')->orderByDesc('id')->first();
+
                                     CompanyInvoice::create([
                                         'company_id'    => $c->id,
                                         'cycle_id'      => $cycleId,
-                                        'ampere'        => (float) $c->ampere,
-                                        'price_per_amp' => (float) $c->price_per_amp,
-                                        'fixed_amount'  => (float) $c->fixed_amount,
-                                        'total_amount'  => (float) $c->fixed_amount, // يبقى حسب منطقك الحالي
+                                        'ampere'        => (float) $lastInvoice->ampere,
+                                        'price_per_amp' => (float) $lastInvoice->price_per_amp,
+                                        'fixed_amount'  => (float) $lastInvoice->fixed_amount,
+                                        'total_amount'  => (float) $lastInvoice->fixed_amount, // يبقى حسب منطقك الحالي
                                         'issued_at'     => now(),
                                     ]);
 
@@ -124,6 +150,11 @@ class ListCompanyInvoices extends ListRecords
                         Notification::make()
                             ->title("تم توليد {$created} فاتورة شركة")
                             ->success()->send();
+
+
+                       if ($user = auth()->user()) {
+                        Notification::make()->title("تم توليد {$created} فاتورة شركة")->success()->sendToDatabase($user);
+                        }
 
                         $this->dispatch('refresh');
                     } catch (Throwable $e) {
@@ -176,7 +207,7 @@ class ListCompanyInvoices extends ListRecords
                             public function collection()
                             {
                                 return CompanyInvoice::query()
-                                    ->with(['company:id,name,phone,status', 'cycle:id,start_date'])
+                                    ->with(['company:id,name,phone,status', 'cycle.generator:id,name'])
                                     ->whereIn('cycle_id', $this->cycleIds)
                                     ->orderByDesc('cycle_id')
                                     ->orderBy('company_id')
@@ -193,10 +224,10 @@ class ListCompanyInvoices extends ListRecords
                                             $ci->company?->name ?? '',
                                             $ci->company?->phone ?? '',
                                             $ci->cycle?->code ?? ($ci->cycle?->start_date?->format('Y-m-d') ?? ''),
-                                            (float) $ci->ampere,
-                                            (float) $ci->price_per_amp,
-                                            (float) $ci->fixed_amount,
-                                            (float) $ci->total_amount,
+                                            empty($ci->ampere)?'0':$ci->ampere,
+                                            empty($ci->price_per_amp)?'0':$ci->price_per_amp,
+                                            empty($ci->fixed_amount)?'0':$ci->fixed_amount,
+                                            empty($ci->total_amount)?'0':$ci->total_amount,
                                             $statusAr,
                                         ];
                                     });

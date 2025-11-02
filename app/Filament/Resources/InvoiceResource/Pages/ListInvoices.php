@@ -82,9 +82,9 @@ class ListInvoices extends ListRecords
                     Select::make('generator_id')->label('المولدة')
                         ->options(fn () => Generator::query()->orderBy('name')->pluck('name', 'id')->all())
                         ->searchable()->required(),
-                    Select::make('status')->label('الحالة')->options([
-                        'active' => 'فعال', 'disconnected' => 'مفصول', 'cancelled' => 'ملغى',
-                    ])->default('active')->required(),
+                    // Select::make('status')->label('الحالة')->options([
+                    //     'active' => 'فعال', 'disconnected' => 'مفصول', 'cancelled' => 'ملغى',
+                    // ])->default('active')->required(),
                     DatePicker::make('subscription_date')->label('تاريخ الاشتراك')->default(now())->required(),
                 ])
                 ->action(function (array $data) {
@@ -667,7 +667,7 @@ class ListInvoices extends ListRecords
                                                 'subscriber_id'    => $sub->id,
                                                 'subscriber_status'  => empty($subscriberStatus)?'active':$subscriberStatus,
                                                 'generator_id'     => $sub->generator_id,
-                                                'collector_id'  => $sub->collector_id, 
+                                                'collector_id'  => $collectorId, 
                                                 'cycle_id'         => $this->cycleId,
                                                 'issued_at'        => $issuedAt,
                                                 'old_reading'      => $oldReading,
