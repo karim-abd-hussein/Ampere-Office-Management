@@ -112,7 +112,7 @@ class ReceiptResource extends Resource
         return $table
             // Eager load بدون طلب عمود code (هو Accessor)
             ->modifyQueryUsing(fn ($query) => $query->with([
-                'invoice:id,cycle_id,subscriber_id',
+                'invoice:id,cycle_id,subscriber_id,subscriber_name',
                 'invoice.subscriber:id,name,generator_id',
                 'invoice.subscriber.generator:id,name',
                 'invoice.cycle:id,start_date',
@@ -120,9 +120,9 @@ class ReceiptResource extends Resource
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('id')->label('رقم الوصل')->sortable(),
-                Tables\Columns\TextColumn::make('short_code')->label('رمز الوصل')->copyable()->toggleable(),
+                // Tables\Columns\TextColumn::make('short_code')->label('رمز الوصل')->copyable()->toggleable(),
                 Tables\Columns\TextColumn::make('invoice.id')->label('رقم الفاتورة')->sortable()->toggleable(),
-                Tables\Columns\TextColumn::make('invoice.subscriber.name')->label('المشترك')->searchable()->toggleable(),
+                Tables\Columns\TextColumn::make('invoice.subscriber_name')->label('المشترك')->searchable()->toggleable(),
                 Tables\Columns\TextColumn::make('invoice.subscriber.generator.name')->label('المولّدة')->sortable()->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('invoice.cycle.code')->label('الدورة')->sortable()->toggleable(),
                 Tables\Columns\TextColumn::make('type')->label('النوع')
@@ -133,17 +133,17 @@ class ReceiptResource extends Resource
             ])
             ->filters([
                 // 🔎 بحث برمز الوصل القصير
-                Filter::make('short')
-                    ->label('بحث برمز الوصل')
-                    ->form([
-                        TextInput::make('code')->label('رمز الوصل')->placeholder('مثال: R1Z3K9'),
-                    ])
-                    ->query(function (Builder $query, array $data) {
-                        $code = trim((string)($data['code'] ?? ''));
-                        if ($code === '') return $query;
-                        $id = \App\Models\Receipt::decodeShortCode($code);
-                        return $id ? $query->whereKey($id) : $query->whereRaw('0=1');
-                    }),
+                // Filter::make('short')
+                //     ->label('بحث برمز الوصل')
+                //     ->form([
+                //         TextInput::make('code')->label('رمز الوصل')->placeholder('مثال: R1Z3K9'),
+                //     ])
+                //     ->query(function (Builder $query, array $data) {
+                //         $code = trim((string)($data['code'] ?? ''));
+                //         if ($code === '') return $query;
+                //         $id = \App\Models\Receipt::decodeShortCode($code);
+                //         return $id ? $query->whereKey($id) : $query->whereRaw('0=1');
+                //     }),
 
                 // حسب الدورة
                 SelectFilter::make('cycle_id')

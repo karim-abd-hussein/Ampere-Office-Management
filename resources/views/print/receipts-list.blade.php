@@ -52,47 +52,37 @@
                 $cycleLabel = $cycle?->code ?? ($inv?->cycle_id ?? '—');
 
                 // أرقام أساسية من الفاتورة
-                $consumption  = (float) ($inv?->consumption ?? 0);
-                $unitUsed     = (float) ($inv?->unit_price_used ?? 0);   // السعر المستخدم فعليًا (قد يكون مخفّض)
-                $finalAmount  = (float) ($inv?->final_amount ?? 0);
-                $calcTotal    = (float) ($inv?->calculated_total ?? ($consumption * $unitUsed));
+                $consumption  = ($inv?->consumption ?? 0);
+                $unitUsed     = ($inv?->unit_price_used ?? 0);   // السعر المستخدم فعليًا (قد يكون مخفّض)
+                $finalAmount  = ($inv?->final_amount ?? 0);
+                $calcTotal    = ($inv?->calculated_total ?? ($consumption * $unitUsed));
 
-                // السعر الأساسي الحقيقي حسب استهلاك الفاتورة (شرائح/تعرفة)
-                $baseUnit = 0.0;
-                try {
-                    if ($gen && method_exists($gen, 'priceForConsumption')) {
-                        $baseUnit = (float) $gen->priceForConsumption($consumption);
-                    } else {
-                        $baseUnit = (float) ($gen?->price_per_kwh ?? $unitUsed);
-                    }
-                } catch (\Throwable $e) {
-                    $baseUnit = (float) ($gen?->price_per_kwh ?? $unitUsed);
-                }
-                $baseTotal = round($baseUnit * $consumption, 2);
-
-                // حالات الخصم
-                $hasPerUnitDiscount = $baseUnit > 0 && $unitUsed > 0 && ($unitUsed + 0.0001) < $baseUnit;
-                $perUnitDiff        = $hasPerUnitDiscount ? round($baseUnit - $unitUsed, 2) : 0.0;      // كم خفّضنا بالكيلو
-                $perUnitSaveTotal   = $hasPerUnitDiscount ? round($perUnitDiff * $consumption, 2) : 0.0;
-
-                $hasFinalDiscount   = ($finalAmount + 0.0001) < $calcTotal;                              // خصم إضافي على المجموع
-                $finalDiscountAmt   = $hasFinalDiscount ? round($calcTotal - $finalAmount, 2) : 0.0;
-
-                $totalSaved         = round($perUnitSaveTotal + $finalDiscountAmt, 2);
             @endphp
 
             @for ($i = 1; $i <= $copies; $i++)
                 <div class="ticket">
-                    <div class="title">مكتب الأمبير</div>
 
                     <div class="row">
-                        <div>رقم الوصل</div>
-                        <div><strong>{{ $serial }}@if($copies > 1) / {{ $i }}@endif</strong></div>
+                        <h4>مكتب الأمبير</h4>
+                        <h5>0945894893 - 0934211772</h5>
+                    </div>
+
+                    
+
+                    <div class="row">
+                        <div>رقم الفاتورة</div>
+                        <div><strong>{{ $inv?->id }}</strong></div>
+                    </div>
+
+
+                    <div class="row">
+                        <div>رقم المشترك</div>
+                        <div><strong>{{ $inv?->subscriber_code_id ?? '—' }}</strong></div>
                     </div>
 
                     <div class="row">
                         <div>اسم المشترك</div>
-                        <div><strong>{{ $sub?->name ?? '—' }}</strong></div>
+                        <div><strong>{{ $inv?->subscriber_name ?? '—' }}</strong></div>
                     </div>
 
                     <div class="row">
@@ -119,50 +109,18 @@
 
                     <div class="row">
                         <div>الاستهلاك (ك.و)</div>
-                        <div>{{ (float) $consumption }}</div>
+                        <div>{{ ($inv?->consumption ?? 0)}}</div>
                     </div>
 
-                    @if($hasPerUnitDiscount)
-                        {{-- قبل/بعد الخصم على سعر الكيلو --}}
-                        <div class="row">
-                            <div>سعر الكيلو قبل الخصم</div>
-                            <div>{{ number_format($baseUnit, 0) }}</div>
-                        </div>
-                        <div class="row">
-                            <div>سعر الكيلو بعد الخصم</div>
-                            <div>{{ number_format($unitUsed, 0) }}</div>
-                        </div>
-                        <div class="row muted">
-                            <div>خصم / ك.و</div>
-                            <div>{{ number_format($perUnitDiff, 0) }}</div>
-                        </div>
-                    @else
-                        {{-- لا يوجد خصم على السعر لكل كيلو --}}
-                        <div class="row">
-                            <div>سعر الكيلو</div>
-                            <div>{{ number_format($unitUsed, 0) }}</div>
-                        </div>
-                    @endif
+                    <div class="row">
+                        <div>السعر</div>
+                        <div>{{ number_format($unitUsed) }}</div>
+                    </div>
 
                     <div class="hr"></div>
-
-                    @if($hasPerUnitDiscount)
-                        <div class="row">
-                            <div>المجموع قبل الخصم</div>
-                            <div>{{ number_format($baseTotal, 0) }}</div>
-                        </div>
-                    @endif
-
-                    @if($hasFinalDiscount)
-                        <div class="row">
-                            <div>خصم إضافي على المجموع</div>
-                            <div>-{{ number_format($finalDiscountAmt, 0) }}</div>
-                        </div>
-                    @endif
-
                     <div class="row bold">
                         <div>المبلغ النهائي</div>
-                        <div>{{ number_format($finalAmount, 0) }}</div>
+                        <div>{{ number_format(($inv?->final_amount ?? 0), 0) }}</div>
                     </div>
                 </div>
             @endfor

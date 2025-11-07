@@ -693,14 +693,14 @@ class InvoiceResource extends Resource
             ->bulkActions([
                 DeleteBulkAction::make()
                     ->label('حذف جماعي')
-                    ->visible(fn () => static::allowManage())
-                    ->after(function () {
-                        try {
-                            DB::statement('ALTER TABLE `invoices` AUTO_INCREMENT = 1');
-                        } catch (\Throwable $e) {
-                            // نتجاهل
-                        }
-                    }),
+                    ->visible(fn () => static::allowManage()),
+                    // ->after(function () {
+                    //     try {
+                    //         DB::statement('ALTER TABLE `invoices` AUTO_INCREMENT = 1');
+                    //     } catch (\Throwable $e) {
+                    //         // نتجاهل
+                    //     }
+                    // }),
             ]);
     }
 
