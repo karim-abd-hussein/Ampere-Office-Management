@@ -589,13 +589,16 @@ class InvoiceResource extends Resource
                     ->preload()
                     ->searchable(false)
                     ->query(function (Builder $query, array $data) {
-                        $values = $data['values'] ?? (isset($data['value']) ? [$data['value']] : []);
-                        $values = array_values(array_filter((array) $values));
-                        if (empty($values)) return $query;
 
-                        return $query->whereHas('subscriber', function (Builder $q) use ($values) {
-                            $q->whereIn('status', $values);
-                        });
+                        $values = $data['values'] ?? [];
+
+                        $values = array_values(array_filter($values));
+
+                        if (empty($values)) {
+                            return $query;
+                        }
+
+                        return $query->whereIn('subscriber_status', $values);
                     }),
 
                 Filter::make('new_reading_empty')
