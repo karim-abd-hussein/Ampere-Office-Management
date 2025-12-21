@@ -147,7 +147,7 @@ class ListReceipts extends ListRecords
             ->where('cycle_id', $cycleId)
             ->when(!empty($generatorIds), fn ($q) => $q->whereHas('subscriber', fn ($qq) => $qq->whereIn('generator_id', $generatorIds)))
             ->when(!empty($collectorIds), fn ($q) => $q->whereHas('subscriber.generator.collectors', fn ($qq) => $qq->whereIn('collectors.id', $collectorIds)))
-            ->when(!empty($statuses), fn ($q) => $q->whereHas('subscriber', fn ($qq) => $qq->whereIn('status', $statuses)))
+            ->when(!empty($statuses), fn ($q) => $q->whereIn('subscriber_status', $statuses))
             ->whereDoesntHave('receipts');
 
         return (int) $query->count();
