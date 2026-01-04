@@ -40,16 +40,16 @@ class ListReceipts extends ListRecords
                         ->searchable()
                         ->required()
                         ->live(),
+                        // by karim : the cycle is belong to spicific generator and collector so we don't need to filter them again
+                    // Select::make('generator_ids')
+                    //     ->label('المولّدة (اختياري)')
+                    //     ->options(fn () => Generator::query()->orderBy('name')->pluck('name', 'id')->all())
+                    //     ->searchable()->preload()->multiple()->live(),
 
-                    Select::make('generator_ids')
-                        ->label('المولّدة (اختياري)')
-                        ->options(fn () => Generator::query()->orderBy('name')->pluck('name', 'id')->all())
-                        ->searchable()->preload()->multiple()->live(),
-
-                    Select::make('collector_ids')
-                        ->label('الجابي (اختياري)')
-                        ->options(fn () => Collector::query()->orderBy('name')->pluck('name', 'id')->all())
-                        ->searchable()->preload()->multiple()->live(),
+                    // Select::make('collector_ids')
+                    //     ->label('الجابي (اختياري)')
+                    //     ->options(fn () => Collector::query()->orderBy('name')->pluck('name', 'id')->all())
+                    //     ->searchable()->preload()->multiple()->live(),
 
                     Select::make('subscriber_statuses')
                         ->label('حالة المشترك (اختياري)')
@@ -82,8 +82,8 @@ class ListReceipts extends ListRecords
                 ->action(function (array $data) {
                     $cycleId      = (int) $data['cycle_id'];
                     $count        = (int) $data['count'];
-                    $generatorIds = collect($data['generator_ids'] ?? [])->filter()->map(fn ($v) => (int) $v)->all();
-                    $collectorIds = collect($data['collector_ids'] ?? [])->filter()->map(fn ($v) => (int) $v)->all();
+                    $generatorIds = []; //collect($data['generator_ids'] ?? [])->filter()->map(fn ($v) => (int) $v)->all();
+                    $collectorIds = []; //collect($data['collector_ids'] ?? [])->filter()->map(fn ($v) => (int) $v)->all();
                     $statuses     = collect($data['subscriber_statuses'] ?? [])->filter()->values()->all();
                     $copies       = (int) ($data['copies'] ?? 1);
 
@@ -95,8 +95,8 @@ class ListReceipts extends ListRecords
                             ->where('cycle_id', $cycleId)
                             ->when(!empty($generatorIds), fn ($q) => $q->whereHas('subscriber', fn ($qq) => $qq->whereIn('generator_id', $generatorIds)))
                             ->when(!empty($collectorIds), fn ($q) => $q->whereHas('subscriber.generator.collectors', fn ($qq) => $qq->whereIn('collectors.id', $collectorIds)))
-                            ->when(!empty($statuses), fn ($q) => $q->whereHas('subscriber', fn ($qq) => $qq->whereIn('status', $statuses)))
-                            ->whereDoesntHave('receipts')
+                            ->when(!empty($statuses), fn ($q) => $q->whereIn('subscriber_status', $statuses))
+                            //->whereDoesntHave('receipts') by karim: we want to generate receipts even for invoices that already have them
                             ->orderBy('id')
                             ->limit($count)
                             ->get();
@@ -139,16 +139,16 @@ class ListReceipts extends ListRecords
         $cycleId = (int) ($get('cycle_id') ?? 0);
         if (! $cycleId) return null;
 
-        $generatorIds = array_map('intval', (array) ($get('generator_ids') ?? []));
-        $collectorIds = array_map('intval', (array) ($get('collector_ids') ?? []));
+        $generatorIds = []; // array_map('intval', (array) ($get('generator_ids') ?? []));
+        $collectorIds = []; // array_map('intval', (array) ($get('collector_ids') ?? []));
         $statuses     = array_values(array_filter((array) ($get('subscriber_statuses') ?? [])));
 
         $query = Invoice::query()
             ->where('cycle_id', $cycleId)
             ->when(!empty($generatorIds), fn ($q) => $q->whereHas('subscriber', fn ($qq) => $qq->whereIn('generator_id', $generatorIds)))
             ->when(!empty($collectorIds), fn ($q) => $q->whereHas('subscriber.generator.collectors', fn ($qq) => $qq->whereIn('collectors.id', $collectorIds)))
-            ->when(!empty($statuses), fn ($q) => $q->whereIn('subscriber_status', $statuses))
-            ->whereDoesntHave('receipts');
+            ->when(!empty($statuses), fn ($q) => $q->whereIn('subscriber_status', $statuses));
+           // ->whereDoesntHave('receipts'); by karim: we want to count all invoices, even those with receipts
 
         return (int) $query->count();
     }
