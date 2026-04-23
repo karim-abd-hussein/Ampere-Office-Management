@@ -26,7 +26,7 @@ jobs:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ secrets.FTP_TARGET_DIR }}
+          server-dir: ${{ secrets.FTP_TARGET_DIR }}/
           local-dir: ./ # Uploads everything from your project root
           exclude: |
             **/.git*
