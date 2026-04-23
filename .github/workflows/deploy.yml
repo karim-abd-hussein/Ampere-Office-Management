@@ -1,0 +1,41 @@
+name: 🚀 Deploy Laravel to InfinityFree
+
+on:
+  push:
+    branches: [ main ] # Triggers on push to the 'main' branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🐧 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2' # Match your local PHP version
+          extensions: mbstring, pdo, pdo_mysql, zip, gd, xml, curl
+
+      - name: 📦 Install Composer Dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+
+      - name: 🚚 Upload via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_TARGET_DIR }}
+          local-dir: ./ # Uploads everything from your project root
+          exclude: |
+            **/.git*
+            **/.env
+            **/node_modules/**
+            .github/**
+            tests/**
+            **/storage/logs/**
+            **/storage/framework/sessions/**
+            **/storage/framework/cache/**
+            phpunit.xml
+            README.md
