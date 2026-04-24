@@ -78,3 +78,5 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/backup', [BackupController::class, 'showBackupPage'])->name('backup.management');
 });
 
+
+Route::get('/', [WelcomeController::class, 'index'])->name('welcome');
