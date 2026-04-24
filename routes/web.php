@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Models\CompanyInvoice;
 use App\Http\Controllers\BackupController;
+use App\Http\Controllers\WelcomeController;
 /*
 |--------------------------------------------------------------------------
 | طباعة الوصولات (قائمة)
