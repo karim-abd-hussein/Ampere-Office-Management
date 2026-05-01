@@ -81,3 +81,4 @@ Route::middleware(['auth'])->group(function () {
 
 
 Route::get('/', [WelcomeController::class, 'index'])->name('welcome');
+Route::get('/about', [WelcomeController::class, 'about'])->name('about');
